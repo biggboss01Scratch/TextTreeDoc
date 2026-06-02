@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.venv/
+data/*.db
+uploaded/*
+generated/*
+templates/report_template.docx
+frontend/dist/
+node_modules/
+.env
+
