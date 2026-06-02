@@ -19,6 +19,7 @@ const selectedText = ref(null)
 const downloadUrl = ref('')
 const notice = ref('')
 const loading = ref(false)
+const generatingWithLLM = ref(false)
 const uploadFile = ref(null)
 
 const treeJson = computed(() => (currentTree.value ? JSON.stringify(currentTree.value, null, 2) : ''))
@@ -121,6 +122,7 @@ async function generateTree() {
     return
   }
   loading.value = true
+  generatingWithLLM.value = useLLM.value
   downloadUrl.value = ''
   try {
     currentTree.value = await apiFetch('/documents/tree', {
@@ -133,6 +135,7 @@ async function generateTree() {
     setNotice(error.message)
   } finally {
     loading.value = false
+    generatingWithLLM.value = false
   }
 }
 
@@ -171,7 +174,10 @@ onMounted(loadTexts)
         <p class="eyebrow">TextTreeDoc</p>
         <h1>文档结构树与 Word 自动生成</h1>
       </div>
-      <span class="status" :class="{ busy: loading }">{{ loading ? '处理中' : '就绪' }}</span>
+      <div class="top-actions">
+        <span class="metric">{{ texts.length }} 条资料</span>
+        <span class="status" :class="{ busy: loading }">{{ loading ? '处理中' : '就绪' }}</span>
+      </div>
     </header>
 
     <p v-if="notice" class="notice">{{ notice }}</p>
@@ -179,12 +185,15 @@ onMounted(loadTexts)
     <section class="workspace">
       <aside class="panel library-panel">
         <div class="panel-head">
-          <h2>文本库</h2>
-          <button type="button" @click="loadTexts">刷新</button>
+          <div>
+            <p class="section-kicker">资料来源</p>
+            <h2>文本库</h2>
+          </div>
+          <button type="button" :disabled="loading" @click="loadTexts">刷新</button>
         </div>
         <div class="search-row">
           <input v-model="keyword" type="search" placeholder="搜索标题、关键词或正文" @keyup.enter="loadTexts" />
-          <button type="button" @click="loadTexts">搜索</button>
+          <button type="button" :disabled="loading" @click="loadTexts">搜索</button>
         </div>
 
         <div class="text-list">
@@ -197,9 +206,10 @@ onMounted(loadTexts)
           >
             <div>
               <h3>{{ item.title }}</h3>
+              <span class="tag">{{ item.source_type || 'manual' }}</span>
               <p>{{ item.summary }}</p>
             </div>
-            <button type="button" title="删除" @click.stop="removeText(item.id)">×</button>
+            <button type="button" title="删除" :disabled="loading" @click.stop="removeText(item.id)">×</button>
           </article>
         </div>
       </aside>
@@ -207,7 +217,10 @@ onMounted(loadTexts)
       <section class="main-grid">
         <section class="panel">
           <div class="panel-head">
-            <h2>新增资料</h2>
+            <div>
+              <p class="section-kicker">手动构建</p>
+              <h2>新增资料</h2>
+            </div>
           </div>
           <div class="form-grid">
             <label>
@@ -224,13 +237,16 @@ onMounted(loadTexts)
             </label>
           </div>
           <div class="actions">
-            <button type="button" class="primary" @click="addText">入库</button>
+            <button type="button" class="primary" :disabled="loading" @click="addText">入库</button>
           </div>
         </section>
 
         <section class="panel">
           <div class="panel-head">
-            <h2>文件上传</h2>
+            <div>
+              <p class="section-kicker">批量导入</p>
+              <h2>文件上传</h2>
+            </div>
           </div>
           <div class="upload-row">
             <input
@@ -239,13 +255,16 @@ onMounted(loadTexts)
               accept=".txt,.md,.docx"
               @change="uploadFile = $event.target.files[0]"
             />
-            <button type="button" @click="uploadSelectedFile">解析入库</button>
+            <button type="button" :disabled="loading" @click="uploadSelectedFile">解析入库</button>
           </div>
         </section>
 
         <section class="panel document-panel">
           <div class="panel-head">
-            <h2>生成文档</h2>
+            <div>
+              <p class="section-kicker">结构树与 Word</p>
+              <h2>生成文档</h2>
+            </div>
           </div>
           <div class="topic-row">
             <input v-model="topic" type="text" placeholder="输入文档主题" @keyup.enter="generateTree" />
@@ -253,16 +272,26 @@ onMounted(loadTexts)
               <input v-model="useLLM" type="checkbox" />
               使用 DeepSeek
             </label>
-            <button type="button" class="primary" @click="generateTree">生成结构树</button>
-            <button type="button" @click="generateDocx">生成 Word</button>
+            <button type="button" class="primary" :disabled="loading" @click="generateTree">生成结构树</button>
+            <button type="button" :disabled="loading || !currentTree" @click="generateDocx">生成 Word</button>
           </div>
           <a v-if="downloadUrl" class="download" :href="downloadUrl">下载生成的 Word 文档</a>
-          <pre class="tree-output">{{ treeJson || '结构树将在这里显示' }}</pre>
+          <div class="tree-frame">
+            <div v-if="generatingWithLLM" class="loading-overlay">
+              <span class="spinner"></span>
+              <strong>DeepSeek 正在生成结构树</strong>
+              <small>模型调用可能需要几秒，请稍候</small>
+            </div>
+            <pre class="tree-output">{{ treeJson || '结构树将在这里显示' }}</pre>
+          </div>
         </section>
 
         <section class="panel detail-panel">
           <div class="panel-head">
-            <h2>资料详情</h2>
+            <div>
+              <p class="section-kicker">当前选中</p>
+              <h2>资料详情</h2>
+            </div>
           </div>
           <div v-if="selectedText" class="detail">
             <h3>{{ selectedText.title }}</h3>
