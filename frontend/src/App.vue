@@ -21,8 +21,35 @@ const notice = ref('')
 const loading = ref(false)
 const generatingWithLLM = ref(false)
 const uploadFile = ref(null)
+const treeViewMode = ref('json')
 
 const treeJson = computed(() => (currentTree.value ? JSON.stringify(currentTree.value, null, 2) : ''))
+const outlineTree = computed(() => (currentTree.value ? buildOutlineTree(currentTree.value) : ''))
+
+function buildOutlineTree(tree) {
+  const lines = [tree.title || '未命名文档']
+  appendSections(lines, tree.sections || [], '')
+  return lines.join('\n')
+}
+
+function appendSections(lines, sections, prefix) {
+  sections.forEach((section, index) => {
+    const isLast = index === sections.length - 1
+    const branch = isLast ? '└── ' : '├── '
+    const childPrefix = prefix + (isLast ? '    ' : '│   ')
+    lines.push(`${prefix}${branch}${section.heading || '未命名章节'}`)
+    if (section.content) {
+      lines.push(`${childPrefix}├── 内容：${section.content.slice(0, 48)}${section.content.length > 48 ? '...' : ''}`)
+    }
+    if (section.blocks?.length) {
+      section.blocks.forEach((block, blockIndex) => {
+        const label = block.type === 'table' ? `表格：${block.headers?.join(' / ') || '未命名表格'}` : block.type
+        lines.push(`${childPrefix}├── ${label || `块 ${blockIndex + 1}`}`)
+      })
+    }
+    appendSections(lines, section.children || [], childPrefix)
+  })
+}
 
 function setNotice(message) {
   notice.value = message
@@ -275,14 +302,33 @@ onMounted(loadTexts)
             <button type="button" class="primary" :disabled="loading" @click="generateTree">生成结构树</button>
             <button type="button" :disabled="loading || !currentTree" @click="generateDocx">生成 Word</button>
           </div>
-          <a v-if="downloadUrl" class="download" :href="downloadUrl">下载生成的 Word 文档</a>
+          <div class="result-toolbar">
+            <a v-if="downloadUrl" class="download" :href="downloadUrl">下载 Word</a>
+            <span v-else class="result-hint">生成 Word 后将在这里显示下载入口</span>
+            <div class="view-tabs" aria-label="结构树显示方式">
+              <button
+                type="button"
+                :class="{ active: treeViewMode === 'json' }"
+                @click="treeViewMode = 'json'"
+              >
+                JSON 词典
+              </button>
+              <button
+                type="button"
+                :class="{ active: treeViewMode === 'outline' }"
+                @click="treeViewMode = 'outline'"
+              >
+                目录树
+              </button>
+            </div>
+          </div>
           <div class="tree-frame">
             <div v-if="generatingWithLLM" class="loading-overlay">
               <span class="spinner"></span>
               <strong>DeepSeek 正在生成结构树</strong>
               <small>模型调用可能需要几秒，请稍候</small>
             </div>
-            <pre class="tree-output">{{ treeJson || '结构树将在这里显示' }}</pre>
+            <pre class="tree-output">{{ treeViewMode === 'json' ? treeJson || '结构树将在这里显示' : outlineTree || '目录树将在这里显示' }}</pre>
           </div>
         </section>
 

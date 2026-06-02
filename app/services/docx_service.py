@@ -16,16 +16,18 @@ from typing import Any
 
 from docx import Document
 from docx.oxml.ns import qn
+from docx.shared import RGBColor
 from docx.shared import Pt
 from docxtpl import DocxTemplate
 
 from app.core.config import GENERATED_DIR, REPORT_TEMPLATE_PATH, ensure_runtime_dirs
 from app.core.database import get_connection
 
-TEMPLATE_VERSION = "TextTreeDoc Template v2"
+TEMPLATE_VERSION = "TextTreeDoc Template v3"
 BODY_FONT = "宋体"
 HEADING_FONT = "黑体"
 ASCII_FONT = "Times New Roman"
+TEXT_COLOR = RGBColor(0, 0, 0)
 
 
 def ensure_report_template() -> None:
@@ -71,6 +73,7 @@ def generate_docx_from_tree(title: str, tree: dict[str, Any]) -> dict:
 
     document = Document(output_path)
     _configure_document_styles(document)
+    _normalize_existing_paragraphs(document)
     for section in tree.get("sections", []):
         _append_section(document, section, level=1)
     document.save(output_path)
@@ -153,6 +156,7 @@ def _configure_document_styles(document: Document) -> None:
     normal = document.styles["Normal"]
     normal.font.name = ASCII_FONT
     normal.font.size = Pt(11)
+    normal.font.color.rgb = TEXT_COLOR
     normal._element.rPr.rFonts.set(qn("w:eastAsia"), BODY_FONT)
     for style_name, size in (("Title", 22), ("Heading 1", 16), ("Heading 2", 14), ("Heading 3", 12)):
         if style_name in document.styles:
@@ -160,7 +164,28 @@ def _configure_document_styles(document: Document) -> None:
             style.font.name = ASCII_FONT
             style.font.size = Pt(size)
             style.font.bold = True
+            style.font.color.rgb = TEXT_COLOR
             style._element.rPr.rFonts.set(qn("w:eastAsia"), HEADING_FONT)
+
+
+def _normalize_existing_paragraphs(document: Document) -> None:
+    """
+    @brief 统一模板渲染后已有段落的字体和颜色。
+
+    @param document python-docx 文档对象。
+    @return None。
+
+    docxtpl 渲染出的封面标题和生成时间来自模板段落，需要额外规范 run，
+    避免 Word 主题样式造成中文字体或颜色不一致。
+    """
+    for paragraph in document.paragraphs:
+        style_name = paragraph.style.name if paragraph.style else ""
+        if style_name == "Title":
+            _apply_paragraph_font(paragraph, HEADING_FONT, size=22, bold=True)
+        elif style_name.startswith("Heading"):
+            _apply_paragraph_font(paragraph, HEADING_FONT, size=16, bold=True)
+        else:
+            _apply_paragraph_font(paragraph, BODY_FONT, size=11)
 
 
 def _apply_paragraph_font(paragraph, east_asia_font: str, size: int = 11, bold: bool = False) -> None:
@@ -177,6 +202,7 @@ def _apply_paragraph_font(paragraph, east_asia_font: str, size: int = 11, bold: 
         run.font.name = ASCII_FONT
         run.font.size = Pt(size)
         run.font.bold = bold
+        run.font.color.rgb = TEXT_COLOR
         run._element.rPr.rFonts.set(qn("w:eastAsia"), east_asia_font)
 
 
