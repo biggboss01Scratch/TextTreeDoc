@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse
 from app.core.config import GENERATED_DIR
 from app.models.schemas import DocxRequest, TreeRequest
 from app.services.docx_service import generate_docx_from_tree
+from app.services.llm_service import generate_tree_with_llm
 from app.services.text_service import search_related_texts
 from app.services.tree_service import generate_tree
 
@@ -32,6 +33,10 @@ def create_document_tree(request: TreeRequest) -> dict:
     @return 文档结构树 JSON。
     """
     related_texts = search_related_texts(request.topic)
+    if request.use_llm:
+        llm_tree = generate_tree_with_llm(request.topic, related_texts)
+        if llm_tree:
+            return llm_tree
     return generate_tree(request.topic, related_texts)
 
 
@@ -63,4 +68,3 @@ def download_docx(filename: str) -> FileResponse:
         filename=filename,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
-

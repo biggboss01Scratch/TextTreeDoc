@@ -8,4 +8,5 @@ templates/report_template.docx
 frontend/dist/
 node_modules/
 .env
-
+.env.*
+!.env.example

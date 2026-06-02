@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api import document_api, text_api, upload_api
-from app.core.config import FRONTEND_DIST_DIR, PROJECT_ROOT
+from app.core.config import FRONTEND_DIST_DIR, PROJECT_ROOT, load_local_env
 from app.core.database import init_db
 
 
@@ -42,6 +42,7 @@ def on_startup() -> None:
 
     @return None。
     """
+    load_local_env()
     init_db()
 
 
@@ -59,4 +60,3 @@ if Path(FRONTEND_DIST_DIR).exists():
     app.mount("/", StaticFiles(directory=FRONTEND_DIST_DIR, html=True), name="frontend")
 else:
     app.mount("/static", StaticFiles(directory=PROJECT_ROOT), name="static-root")
-

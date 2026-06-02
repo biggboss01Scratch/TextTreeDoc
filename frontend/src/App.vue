@@ -13,6 +13,7 @@ const newText = ref({
   content: '',
 })
 const topic = ref('开源许可证分析报告')
+const useLLM = ref(false)
 const currentTree = ref(null)
 const selectedText = ref(null)
 const downloadUrl = ref('')
@@ -125,7 +126,7 @@ async function generateTree() {
     currentTree.value = await apiFetch('/documents/tree', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ topic: topic.value.trim(), use_llm: false }),
+      body: JSON.stringify({ topic: topic.value.trim(), use_llm: useLLM.value }),
     })
     setNotice('结构树已生成')
   } catch (error) {
@@ -248,6 +249,10 @@ onMounted(loadTexts)
           </div>
           <div class="topic-row">
             <input v-model="topic" type="text" placeholder="输入文档主题" @keyup.enter="generateTree" />
+            <label class="switch">
+              <input v-model="useLLM" type="checkbox" />
+              使用 DeepSeek
+            </label>
             <button type="button" class="primary" @click="generateTree">生成结构树</button>
             <button type="button" @click="generateDocx">生成 Word</button>
           </div>

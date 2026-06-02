@@ -72,6 +72,23 @@ http://127.0.0.1:5173
 http://127.0.0.1:8000/docs
 ```
 
+## DeepSeek API 可选配置
+
+项目默认不依赖大模型；没有 API Key 时会使用本地规则生成摘要、关键词和文档结构树。
+
+如果需要启用 DeepSeek，请在启动后端前设置环境变量：
+
+```bash
+export DEEPSEEK_API_KEY="你的新DeepSeek密钥"
+export LLM_BASE_URL="https://api.deepseek.com"
+export LLM_MODEL="deepseek-v4-flash"
+python3 -m uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+前端“生成文档”区域勾选“使用 DeepSeek”后，后端会优先调用大模型生成文档结构树；如果接口调用失败，会自动回退到本地规则。
+
+请不要把真实 API Key 写入代码、README 或提交到 GitHub。
+
 ## 接口说明
 
 - `GET /texts`：查询文本列表，支持 `keyword` 参数
@@ -105,4 +122,3 @@ http://127.0.0.1:8000/docs
 本项目为《开源技术与应用》课程作业，当前许可证暂定。  
 在项目最终提交前，将根据实际使用的第三方开源项目许可证情况，统一选择合适的开源许可证。  
 若未直接复制受限制许可证项目的源码，项目默认倾向采用 MIT License。
-
