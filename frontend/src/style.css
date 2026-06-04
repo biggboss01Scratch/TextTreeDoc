@@ -258,9 +258,9 @@ h3 {
 }
 
 .tab-button.active {
-  background: #14212a;
+  background: #1d7f91;
   color: #ffffff;
-  box-shadow: 0 10px 20px rgba(20, 33, 42, 0.18);
+  box-shadow: 0 10px 20px rgba(29, 127, 145, 0.2);
 }
 
 .tab-button.active small {
@@ -348,6 +348,10 @@ h3 {
 
 .library-actions {
   margin-top: 14px;
+}
+
+.hidden-file-input {
+  display: none;
 }
 
 .search-row,
@@ -556,14 +560,62 @@ label.full {
 .switch {
   display: flex;
   align-items: center;
-  grid-auto-flow: column;
-  gap: 8px;
-  min-height: 40px;
+  justify-content: flex-start;
+  gap: 10px;
+  width: 260px;
+  flex: 0 0 260px;
+  min-height: 44px;
+  padding: 0 18px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f6675;
   border: 1px solid #d1dbe3;
   border-radius: 999px;
-  padding: 0 12px;
   background: #f8fafb;
   white-space: nowrap;
+}
+
+.switch-native {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.switch-box {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border: 2px solid #77858e;
+  border-radius: 5px;
+  background: #ffffff;
+}
+
+.switch-native:checked + .switch-box {
+  border-color: #1d7f91;
+  background: #1d7f91;
+}
+
+.switch-native:checked + .switch-box::after {
+  display: block;
+  width: 6px;
+  height: 11px;
+  margin: 2px auto 0;
+  border: solid #ffffff;
+  border-width: 0 3px 3px 0;
+  content: "";
+  transform: rotate(45deg);
+}
+
+.switch-native:focus + .switch-box {
+  box-shadow: 0 0 0 3px rgba(29, 127, 145, 0.16);
+}
+
+.switch-text {
+  flex: 0 0 auto;
 }
 
 .feedback-box {

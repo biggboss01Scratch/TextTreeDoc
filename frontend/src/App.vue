@@ -122,13 +122,42 @@ function importMaterials() {
   const fileInput = document.querySelector('#fileInput')
   if (fileInput) {
     fileInput.click()
-    setNotice('请选择文件后点击解析入库')
   }
 }
 
-function chooseImprovement(option) {
+async function handleImportFile(event) {
+  uploadFile.value = event.target.files?.[0] || null
+  await uploadSelectedFile()
+}
+
+async function chooseImprovement(option) {
   selectedImprovement.value = option
-  setNotice(`已选择：${option.label}`)
+  if (!topic.value.trim()) {
+    setNotice('请输入文档主题')
+    return
+  }
+  loading.value = true
+  generatingWithLLM.value = true
+  downloadUrl.value = ''
+  try {
+    currentTree.value = await apiFetch('/documents/tree', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        topic: topic.value.trim(),
+        use_llm: true,
+        library_ids: selectedLibraryIds.value,
+        template_config: templateSettings.value,
+        prompt_delta: option.prompt_delta,
+      }),
+    })
+    setNotice(`已按“${option.label}”更新结构树`)
+  } catch (error) {
+    setNotice(error.message)
+  } finally {
+    loading.value = false
+    generatingWithLLM.value = false
+  }
 }
 
 async function apiFetch(path, options = {}) {
@@ -457,7 +486,6 @@ onMounted(async () => {
             <p class="section-kicker">资料来源</p>
             <h2>文本库选择</h2>
           </div>
-          <span class="soft-badge">后端已接入</span>
         </div>
 
         <div class="library-list">
@@ -475,6 +503,13 @@ onMounted(async () => {
           <button type="button" class="ghost" :disabled="loading" @click="createLibrary">新建文本库</button>
           <button type="button" class="danger" :disabled="loading" @click="deleteSelectedLibrary">删除文本库</button>
         </div>
+        <input
+          id="fileInput"
+          class="hidden-file-input"
+          type="file"
+          accept=".txt,.md,.docx"
+          @change="handleImportFile"
+        />
       </aside>
 
       <section class="panel source-panel">
@@ -511,50 +546,6 @@ onMounted(async () => {
         </div>
       </section>
 
-      <section class="panel entry-panel">
-        <div class="panel-head">
-          <div>
-            <p class="section-kicker">手动构建</p>
-            <h2>新增资料</h2>
-          </div>
-        </div>
-        <div class="form-grid">
-          <label>
-            标题
-            <input v-model="newText.title" type="text" placeholder="例如：开源许可证概述" />
-          </label>
-          <label>
-            关键词
-            <input v-model="newText.keywords" type="text" placeholder="可留空，后端会自动提取" />
-          </label>
-          <label class="full">
-            正文
-            <textarea v-model="newText.content" rows="5" placeholder="粘贴或输入文本资料"></textarea>
-          </label>
-        </div>
-        <div class="actions">
-          <button type="button" class="primary" :disabled="loading" @click="addText">入库</button>
-        </div>
-      </section>
-
-      <section class="panel upload-panel">
-        <div class="panel-head">
-          <div>
-            <p class="section-kicker">批量导入</p>
-            <h2>文件上传</h2>
-          </div>
-        </div>
-        <div class="upload-row">
-          <input
-            id="fileInput"
-            type="file"
-            accept=".txt,.md,.docx"
-            @change="uploadFile = $event.target.files[0]"
-          />
-          <button type="button" :disabled="loading" @click="uploadSelectedFile">解析入库</button>
-        </div>
-      </section>
-
       <section class="panel detail-panel">
         <div class="panel-head">
           <div>
@@ -578,7 +569,6 @@ onMounted(async () => {
             <p class="section-kicker">前端状态</p>
             <h2>模板参数调节器</h2>
           </div>
-          <span class="soft-badge">后端已接入</span>
         </div>
 
         <div class="slider-list">
@@ -643,8 +633,9 @@ onMounted(async () => {
         <div class="topic-row">
           <input v-model="topic" type="text" placeholder="输入文档主题" @keyup.enter="generateTree" />
           <label class="switch">
-            <input v-model="useLLM" type="checkbox" />
-            使用 DeepSeek
+            <input v-model="useLLM" type="checkbox" class="switch-native" />
+            <span class="switch-box"></span>
+            <span class="switch-text">使用 DeepSeek</span>
           </label>
           <button type="button" class="primary" :disabled="loading" @click="generateTree">生成结构树</button>
           <button type="button" :disabled="loading || !currentTree" @click="generateDocx">生成 Word</button>
