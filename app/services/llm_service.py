@@ -113,6 +113,19 @@ def generate_tree_with_llm(topic: str, related_texts: list[dict[str, Any]]) -> d
     return None
 
 
+def call_llm(prompt: str) -> str | None:
+    """
+    @brief 调用 OpenAI-compatible 大模型接口。
+
+    @param prompt 用户提示词。
+    @return 模型返回文本；未配置 API Key 或调用失败时返回 None。
+    """
+    if not llm_available():
+        return None
+    result = _chat_completion(prompt, system="你是一个严谨的中文文档生成助手，必须遵循用户输出格式要求。")
+    return result or None
+
+
 def _api_key() -> str:
     """
     @brief 读取大模型 API Key。
@@ -128,7 +141,7 @@ def _api_base_url() -> str:
 
     @return API 基础地址。
     """
-    return (os.getenv("LLM_BASE_URL") or "https://api.deepseek.com").rstrip("/")
+    return (os.getenv("LLM_API_BASE") or os.getenv("LLM_BASE_URL") or "https://api.deepseek.com").rstrip("/")
 
 
 def _model() -> str:
@@ -137,7 +150,7 @@ def _model() -> str:
 
     @return 模型名称。
     """
-    return os.getenv("LLM_MODEL") or "deepseek-v4-flash"
+    return os.getenv("LLM_MODEL") or "deepseek-chat"
 
 
 def _chat_completion(prompt: str, system: str) -> str:

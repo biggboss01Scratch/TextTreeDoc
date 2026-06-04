@@ -1,0 +1,213 @@
+"""
+@file template_service.py
+@brief 模板参数配置业务逻辑模块。
+
+模板配置以 JSON 字符串保存到 SQLite，返回给接口时解析为 dict。
+"""
+
+import json
+from datetime import datetime
+from typing import Any
+
+from app.core.database import get_connection
+from app.models.schemas import TemplateConfigCreate, TemplateConfigUpdate
+
+
+DEFAULT_TEMPLATE_CONFIG: dict[str, int] = {
+    "length": 70,
+    "professionalism": 80,
+    "formality": 75,
+    "structure": 85,
+    "evidence": 70,
+    "tables": 50,
+    "creativity": 40,
+}
+
+
+def list_template_configs() -> list[dict]:
+    """
+    @brief 查询所有模板配置。
+
+    @return 模板配置列表。
+    """
+    with get_connection() as connection:
+        rows = connection.execute("SELECT * FROM template_configs ORDER BY is_default DESC, id").fetchall()
+    return [_row_to_template(row) for row in rows]
+
+
+def get_default_template_config() -> dict:
+    """
+    @brief 获取默认模板配置。
+
+    @return 默认模板配置。
+    """
+    with get_connection() as connection:
+        row = connection.execute(
+            "SELECT * FROM template_configs WHERE is_default = 1 ORDER BY id LIMIT 1"
+        ).fetchone()
+        if row is None:
+            row = connection.execute("SELECT * FROM template_configs ORDER BY id LIMIT 1").fetchone()
+        if row is None:
+            cursor = connection.execute(
+                """
+                INSERT INTO template_configs (name, config_json, is_default, created_at)
+                VALUES (?, ?, 1, ?)
+                """,
+                (
+                    "默认模板配置",
+                    json.dumps(DEFAULT_TEMPLATE_CONFIG, ensure_ascii=False),
+                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                ),
+            )
+            connection.commit()
+            row = connection.execute("SELECT * FROM template_configs WHERE id = ?", (cursor.lastrowid,)).fetchone()
+    return _row_to_template(row)
+
+
+def create_template_config(payload: TemplateConfigCreate) -> dict:
+    """
+    @brief 创建模板配置。
+
+    @param payload 创建请求。
+    @return 创建后的模板配置。
+    """
+    with get_connection() as connection:
+        if payload.is_default:
+            connection.execute("UPDATE template_configs SET is_default = 0")
+        cursor = connection.execute(
+            """
+            INSERT INTO template_configs (name, config_json, is_default, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                payload.name,
+                json.dumps(_normalize_config(payload.config), ensure_ascii=False),
+                1 if payload.is_default else 0,
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            ),
+        )
+        connection.commit()
+        return _get_template_config(cursor.lastrowid)
+
+
+def update_template_config(config_id: int, payload: TemplateConfigUpdate) -> dict:
+    """
+    @brief 更新模板配置。
+
+    @param config_id 模板配置 id。
+    @param payload 更新请求。
+    @return 更新后的模板配置。
+    @raises ValueError 当模板配置不存在时抛出。
+    """
+    current = _get_template_config(config_id)
+    name = payload.name if payload.name is not None else current["name"]
+    config = payload.config if payload.config is not None else current["config"]
+    with get_connection() as connection:
+        if payload.is_default:
+            connection.execute("UPDATE template_configs SET is_default = 0")
+        connection.execute(
+            """
+            UPDATE template_configs
+            SET name = ?, config_json = ?, is_default = CASE WHEN ? IS NULL THEN is_default ELSE ? END
+            WHERE id = ?
+            """,
+            (
+                name,
+                json.dumps(_normalize_config(config), ensure_ascii=False),
+                payload.is_default,
+                1 if payload.is_default else 0,
+                config_id,
+            ),
+        )
+        connection.commit()
+    return _get_template_config(config_id)
+
+
+def set_default_template_config(config_id: int) -> dict:
+    """
+    @brief 将指定模板配置设为默认。
+
+    @param config_id 模板配置 id。
+    @return 更新后的模板配置。
+    @raises ValueError 当模板配置不存在时抛出。
+    """
+    _get_template_config(config_id)
+    with get_connection() as connection:
+        connection.execute("UPDATE template_configs SET is_default = 0")
+        connection.execute("UPDATE template_configs SET is_default = 1 WHERE id = ?", (config_id,))
+        connection.commit()
+    return _get_template_config(config_id)
+
+
+def delete_template_config(config_id: int) -> None:
+    """
+    @brief 删除非默认模板配置。
+
+    @param config_id 模板配置 id。
+    @return None。
+    @raises ValueError 当配置不存在或为默认配置时抛出。
+    """
+    current = _get_template_config(config_id)
+    if current["is_default"]:
+        raise ValueError("默认模板配置不允许删除")
+    with get_connection() as connection:
+        connection.execute("DELETE FROM template_configs WHERE id = ?", (config_id,))
+        connection.commit()
+
+
+def merge_with_default_config(config: dict[str, Any] | None) -> dict[str, Any]:
+    """
+    @brief 将外部模板参数与默认参数合并。
+
+    @param config 外部配置。
+    @return 补齐后的配置。
+    """
+    merged: dict[str, Any] = dict(DEFAULT_TEMPLATE_CONFIG)
+    if config:
+        merged.update(config)
+    return merged
+
+
+def _get_template_config(config_id: int) -> dict:
+    """
+    @brief 查询单个模板配置。
+
+    @param config_id 模板配置 id。
+    @return 模板配置字典。
+    @raises ValueError 当配置不存在时抛出。
+    """
+    with get_connection() as connection:
+        row = connection.execute("SELECT * FROM template_configs WHERE id = ?", (config_id,)).fetchone()
+    if row is None:
+        raise ValueError("模板配置不存在")
+    return _row_to_template(row)
+
+
+def _row_to_template(row) -> dict:
+    """
+    @brief 将 SQLite 行转换为接口返回结构。
+
+    @param row SQLite 行。
+    @return 模板配置字典。
+    """
+    try:
+        config = json.loads(row["config_json"])
+    except json.JSONDecodeError:
+        config = {}
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "config": merge_with_default_config(config),
+        "is_default": bool(row["is_default"]),
+        "created_at": row["created_at"],
+    }
+
+
+def _normalize_config(config: dict[str, Any]) -> dict[str, Any]:
+    """
+    @brief 规范化模板配置，补齐缺省字段。
+
+    @param config 原始配置。
+    @return 规范化后的配置。
+    """
+    return merge_with_default_config(config)

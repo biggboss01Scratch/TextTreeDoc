@@ -14,6 +14,7 @@ from datetime import datetime
 
 from app.core.database import get_connection
 from app.models.schemas import TextCreate
+from app.services.library_service import get_default_library_id
 from app.services.llm_service import generate_keywords, generate_summary
 
 
@@ -26,12 +27,13 @@ def create_text(payload: TextCreate) -> dict:
     """
     summary = payload.summary or generate_summary(payload.content)
     keywords = payload.keywords or ",".join(generate_keywords(payload.title, payload.content))
+    library_id = payload.library_id or get_default_library_id()
     created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with get_connection() as connection:
         cursor = connection.execute(
             """
-            INSERT INTO texts (title, summary, content, keywords, source_type, source_url, created_at, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO texts (title, summary, content, keywords, source_type, source_url, library_id, created_at, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 payload.title,
@@ -40,6 +42,7 @@ def create_text(payload: TextCreate) -> dict:
                 keywords,
                 payload.source_type,
                 payload.source_url or "",
+                library_id,
                 created_at,
                 payload.created_by or "anonymous",
             ),
@@ -48,7 +51,7 @@ def create_text(payload: TextCreate) -> dict:
         return get_text(cursor.lastrowid)
 
 
-def list_texts(keyword: str | None = None) -> list[dict]:
+def list_texts(keyword: str | None = None, library_id: int | None = None) -> list[dict]:
     """
     @brief 查询文本资料列表。
 
@@ -56,18 +59,20 @@ def list_texts(keyword: str | None = None) -> list[dict]:
     @return 文本资料字典列表。
     """
     with get_connection() as connection:
+        clauses = []
+        values = []
         if keyword:
             pattern = f"%{keyword}%"
-            rows = connection.execute(
-                """
-                SELECT * FROM texts
-                WHERE title LIKE ? OR summary LIKE ? OR keywords LIKE ? OR content LIKE ?
-                ORDER BY id DESC
-                """,
-                (pattern, pattern, pattern, pattern),
-            ).fetchall()
-        else:
-            rows = connection.execute("SELECT * FROM texts ORDER BY id DESC").fetchall()
+            clauses.append("(title LIKE ? OR summary LIKE ? OR keywords LIKE ? OR content LIKE ?)")
+            values.extend([pattern, pattern, pattern, pattern])
+        if library_id is not None:
+            clauses.append("library_id = ?")
+            values.append(library_id)
+        where_clause = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        rows = connection.execute(
+            f"SELECT * FROM texts {where_clause} ORDER BY id DESC",
+            values,
+        ).fetchall()
     return [dict(row) for row in rows]
 
 
@@ -101,7 +106,7 @@ def delete_text(text_id: int) -> None:
         raise ValueError("文本资料不存在")
 
 
-def search_related_texts(topic: str, limit: int = 5) -> list[dict]:
+def search_related_texts(topic: str, limit: int = 5, library_ids: list[int] | None = None) -> list[dict]:
     """
     @brief 根据主题检索相关文本资料。
 
@@ -112,6 +117,7 @@ def search_related_texts(topic: str, limit: int = 5) -> list[dict]:
     优先按主题关键词匹配；如果没有命中，则返回最近的资料作为演示兜底。
     """
     keywords = _split_topic_keywords(topic)
+    library_ids = [library_id for library_id in (library_ids or []) if library_id is not None]
     with get_connection() as connection:
         clauses = []
         values = []
@@ -119,12 +125,25 @@ def search_related_texts(topic: str, limit: int = 5) -> list[dict]:
             pattern = f"%{word}%"
             clauses.append("(title LIKE ? OR keywords LIKE ? OR summary LIKE ? OR content LIKE ?)")
             values.extend([pattern, pattern, pattern, pattern])
+        library_clause = ""
+        library_values: list[int] = []
+        if library_ids:
+            placeholders = ",".join("?" for _ in library_ids)
+            library_clause = f" AND library_id IN ({placeholders})"
+            library_values = library_ids
         rows = connection.execute(
-            f"SELECT * FROM texts WHERE {' OR '.join(clauses)} ORDER BY id DESC LIMIT ?",
-            (*values, limit),
+            f"SELECT * FROM texts WHERE ({' OR '.join(clauses)}){library_clause} ORDER BY id DESC LIMIT ?",
+            (*values, *library_values, limit),
         ).fetchall()
         if not rows:
-            rows = connection.execute("SELECT * FROM texts ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+            if library_ids:
+                placeholders = ",".join("?" for _ in library_ids)
+                rows = connection.execute(
+                    f"SELECT * FROM texts WHERE library_id IN ({placeholders}) ORDER BY id DESC LIMIT ?",
+                    (*library_ids, limit),
+                ).fetchall()
+            else:
+                rows = connection.execute("SELECT * FROM texts ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
     return [dict(row) for row in rows]
 
 

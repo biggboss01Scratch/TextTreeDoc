@@ -9,6 +9,7 @@
 @date 2026
 """
 
+import json
 import sqlite3
 from datetime import datetime
 from typing import Iterable
@@ -40,6 +41,16 @@ def init_db() -> None:
     with get_connection() as connection:
         connection.execute(
             """
+            CREATE TABLE IF NOT EXISTS text_libraries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                description TEXT,
+                created_at TEXT
+            )
+            """
+        )
+        connection.execute(
+            """
             CREATE TABLE IF NOT EXISTS texts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT NOT NULL,
@@ -48,6 +59,7 @@ def init_db() -> None:
                 keywords TEXT,
                 source_type TEXT,
                 source_url TEXT,
+                library_id INTEGER,
                 created_at TEXT,
                 created_by TEXT
             )
@@ -66,12 +78,98 @@ def init_db() -> None:
             )
             """
         )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS template_configs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                config_json TEXT NOT NULL,
+                is_default INTEGER DEFAULT 0,
+                created_at TEXT
+            )
+            """
+        )
+        _ensure_texts_library_id_column(connection)
+        default_library_id = _ensure_default_library(connection)
+        connection.execute(
+            "UPDATE texts SET library_id = ? WHERE library_id IS NULL",
+            (default_library_id,),
+        )
         if connection.execute("SELECT COUNT(*) FROM texts").fetchone()[0] == 0:
-            _insert_seed_texts(connection)
+            _insert_seed_texts(connection, default_library_id)
+        _ensure_default_template_config(connection)
         connection.commit()
 
 
-def _insert_seed_texts(connection: sqlite3.Connection) -> None:
+def _ensure_texts_library_id_column(connection: sqlite3.Connection) -> None:
+    """
+    @brief 兼容旧数据库，为 texts 表补充 library_id 字段。
+
+    @param connection SQLite 数据库连接。
+    @return None。
+    """
+    columns = [row["name"] for row in connection.execute("PRAGMA table_info(texts)").fetchall()]
+    if "library_id" not in columns:
+        connection.execute("ALTER TABLE texts ADD COLUMN library_id INTEGER")
+
+
+def _ensure_default_library(connection: sqlite3.Connection) -> int:
+    """
+    @brief 确保默认文本库存在。
+
+    @param connection SQLite 数据库连接。
+    @return 默认文本库 id。
+    """
+    row = connection.execute(
+        "SELECT id FROM text_libraries WHERE name = ? ORDER BY id LIMIT 1",
+        ("默认文本库",),
+    ).fetchone()
+    if row:
+        return int(row["id"])
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    cursor = connection.execute(
+        """
+        INSERT INTO text_libraries (name, description, created_at)
+        VALUES (?, ?, ?)
+        """,
+        ("默认文本库", "系统初始化创建的默认资料库。", now),
+    )
+    return int(cursor.lastrowid)
+
+
+def _ensure_default_template_config(connection: sqlite3.Connection) -> None:
+    """
+    @brief 确保默认模板配置存在。
+
+    @param connection SQLite 数据库连接。
+    @return None。
+    """
+    count = connection.execute("SELECT COUNT(*) FROM template_configs").fetchone()[0]
+    if count:
+        return
+    default_config = {
+        "length": 70,
+        "professionalism": 80,
+        "formality": 75,
+        "structure": 85,
+        "evidence": 70,
+        "tables": 50,
+        "creativity": 40,
+    }
+    connection.execute(
+        """
+        INSERT INTO template_configs (name, config_json, is_default, created_at)
+        VALUES (?, ?, 1, ?)
+        """,
+        (
+            "默认模板配置",
+            json.dumps(default_config, ensure_ascii=False),
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        ),
+    )
+
+
+def _insert_seed_texts(connection: sqlite3.Connection, library_id: int) -> None:
     """
     @brief 插入课程演示用的示例文本。
 
@@ -79,7 +177,7 @@ def _insert_seed_texts(connection: sqlite3.Connection) -> None:
     @return None。
     """
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    seed_texts: Iterable[tuple[str, str, str, str, str, str, str]] = [
+    seed_texts: Iterable[tuple[str, str, str, str, str, str, int, str]] = [
         (
             "开源许可证概述",
             "开源许可证用于规定软件使用、复制、修改和分发的权利与义务。",
@@ -87,6 +185,7 @@ def _insert_seed_texts(connection: sqlite3.Connection) -> None:
             "开源,许可证,MIT,GPL,Apache",
             "seed",
             "",
+            library_id,
             now,
         ),
         (
@@ -96,6 +195,7 @@ def _insert_seed_texts(connection: sqlite3.Connection) -> None:
             "课程报告,文档生成,结构树,Word",
             "seed",
             "",
+            library_id,
             now,
         ),
         (
@@ -105,14 +205,14 @@ def _insert_seed_texts(connection: sqlite3.Connection) -> None:
             "表格,技术文档,Word,模块",
             "seed",
             "",
+            library_id,
             now,
         ),
     ]
     connection.executemany(
         """
-        INSERT INTO texts (title, summary, content, keywords, source_type, source_url, created_at, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'system')
+        INSERT INTO texts (title, summary, content, keywords, source_type, source_url, library_id, created_at, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'system')
         """,
         seed_texts,
     )
-

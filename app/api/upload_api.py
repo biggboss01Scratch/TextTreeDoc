@@ -10,7 +10,7 @@
 
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from app.core.config import UPLOAD_DIR, ensure_runtime_dirs
 from app.models.schemas import TextCreate
@@ -21,7 +21,10 @@ router = APIRouter(prefix="/upload", tags=["upload"])
 
 
 @router.post("")
-async def upload_file(file: UploadFile = File(...)) -> dict:
+async def upload_file(
+    file: UploadFile = File(...),
+    library_id: int | None = Form(default=None),
+) -> dict:
     """
     @brief 上传文件并解析入库。
 
@@ -46,7 +49,7 @@ async def upload_file(file: UploadFile = File(...)) -> dict:
             content=content,
             source_type="upload",
             source_url=str(save_path),
+            library_id=library_id,
         )
     )
     return text
-
