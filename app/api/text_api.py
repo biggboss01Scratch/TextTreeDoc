@@ -28,14 +28,18 @@ def create_text(payload: TextCreate) -> dict:
 
 
 @router.get("", response_model=list[TextOut])
-def list_texts(keyword: str | None = Query(default=None)) -> list[dict]:
+def list_texts(
+    keyword: str | None = Query(default=None),
+    library_id: int | None = Query(default=None),
+) -> list[dict]:
     """
     @brief 查询文本资料列表。
 
     @param keyword 可选搜索关键词。
+    @param library_id 可选文本库 id。
     @return 文本资料列表。
     """
-    return text_service.list_texts(keyword)
+    return text_service.list_texts(keyword, library_id)
 
 
 @router.get("/{text_id}", response_model=TextOut)
@@ -65,4 +69,3 @@ def delete_text(text_id: int) -> dict:
         return {"ok": True}
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-
