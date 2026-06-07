@@ -38,7 +38,7 @@ TextTreeDoc 聚焦课程题目“文档创建”：从轻量文本库中检索�
 - `app/services/text_service.py`：文本资料新增、查询、删除和主题检索。
 - `app/services/tree_service.py`：根据主题和相关文本生成文档结构树。
 - `app/services/docx_service.py`：自动创建模板，并根据结构树生成 docx。
-- `app/services/file_parser.py`：解析 txt、md、docx 上传文件。
+- `app/services/file_parser.py`：解析 txt、md、docx、pdf 上传文件。
 - `app/api/*.py`：FastAPI 接口层。
 
 ## 文档结构树 JSON
@@ -68,4 +68,3 @@ TextTreeDoc 聚焦课程题目“文档创建”：从轻量文本库中检索�
 ## 模板策略
 
 项目要求基于 docxtemplate / docxtpl 模板生成 docx。为了保证首次运行可用，后端会在 `templates/report_template.docx` 不存在时自动创建最小模板，再使用 docxtpl 渲染标题和生成时间，最后使用 python-docx 追加动态章节与表格。
-

@@ -64,7 +64,7 @@ def create_docx(request: DocxRequest) -> dict:
     @param request 包含标题和文档树的请求体。
     @return 文件名和下载地址。
     """
-    return generate_docx_from_tree(request.title, request.tree)
+    return generate_docx_from_tree(request.title, request.tree, request.format_config)
 
 
 @router.post("/feedback-options")

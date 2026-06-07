@@ -70,6 +70,13 @@ class TemplateConfigOut(BaseModel):
     created_at: str | None
 
 
+class DocumentTemplateBuildRequest(BaseModel):
+    template_type: str = Field(..., min_length=1)
+    requirement: str | None = ""
+    base_config: dict[str, Any] | None = None
+    use_llm: bool = False
+
+
 class TreeRequest(BaseModel):
     topic: str = Field(..., min_length=1)
     use_llm: bool = False
@@ -87,3 +94,4 @@ class FeedbackOptionsRequest(BaseModel):
 class DocxRequest(BaseModel):
     title: str
     tree: dict[str, Any]
+    format_config: dict[str, Any] | None = None

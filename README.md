@@ -5,7 +5,7 @@
 ## 功能特性
 
 - 文本资料新增、查询、删除
-- txt / md / docx 文件上传解析入库
+- txt / md / docx / pdf 文件上传解析入库
 - SQLite 数据库自动初始化，并内置演示资料
 - 根据主题检索文本库并生成文档结构树
 - 自动创建最小 docxtpl 模板
@@ -95,7 +95,7 @@ python3 -m uvicorn main:app --host 0.0.0.0 --port 8000
 - `POST /texts`：新增文本资料
 - `GET /texts/{text_id}`：查看文本详情
 - `DELETE /texts/{text_id}`：删除文本资料
-- `POST /upload`：上传 txt / md / docx 文件并入库
+- `POST /upload`：上传 txt / md / docx / pdf 文件并入库
 - `POST /documents/tree`：根据主题生成文档结构树
 - `POST /documents/docx`：根据结构树生成 Word 文档
 - `GET /documents/download/{filename}`：下载生成的 Word 文档
@@ -104,7 +104,9 @@ python3 -m uvicorn main:app --host 0.0.0.0 --port 8000
 
 1. 启动 FastAPI 后端和 Vue 前端。
 2. 打开前端页面。
-3. 新增几条文本资料，或上传 txt / md / docx 文件。
+3. 新增几条文本资料，或上传 txt / md / docx / pdf 文件。
+
+PDF 上传目前支持文字型 PDF。扫描版 PDF 需要先 OCR，再上传识别后的文本或文档。
 4. 输入文档主题，例如“开源许可证分析报告”。
 5. 点击“生成结构树”查看 JSON。
 6. 点击“生成 Word”，下载生成的 docx 文件。

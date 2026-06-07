@@ -7,6 +7,7 @@ const API_BASE =
 
 const tabs = [
   { key: 'library', label: '文本库选择', hint: '选择资料来源' },
+  { key: 'documentTemplate', label: 'AI 文档模板', hint: '控制 Word 格式' },
   { key: 'template', label: '模板调节', hint: '控制生成风格' },
   { key: 'generate', label: '文档生成与预览', hint: '结构树与 Word' },
 ]
@@ -24,6 +25,29 @@ const templateSettings = ref({
 })
 const templateConfigId = ref(null)
 const templateConfigName = ref('默认模板配置')
+const documentTemplateTypes = ['实验报告', '结课论文', '技术分析报告', '项目设计文档']
+const selectedDocumentTemplateType = ref('实验报告')
+const documentTemplateRequirement = ref('正文首行缩进两个中文字符，1.5 倍行距，一级标题黑体三号，正文宋体小四，标题编号使用 1 / 1.1 / 1.1.1。')
+const documentFormatConfig = ref({
+  template_type: '实验报告',
+  style_name: '实验报告模板',
+  heading_numbering: 'decimal',
+  cover: true,
+  toc: false,
+  abstract: false,
+  references: false,
+  body_font: '宋体',
+  heading_font: '黑体',
+  ascii_font: 'Times New Roman',
+  body_size: 11,
+  heading1_size: 16,
+  heading2_size: 14,
+  heading3_size: 12,
+  line_spacing: 1.5,
+  first_line_indent_chars: 2,
+  paragraph_space_after: 6,
+  table_style: 'Table Grid',
+})
 
 const settingItems = [
   { key: 'length', label: '文本详细程度', minText: '简洁', maxText: '详细' },
@@ -48,9 +72,13 @@ const useLLM = ref(false)
 const currentTree = ref(null)
 const selectedText = ref(null)
 const downloadUrl = ref('')
-const notice = ref('')
+const toast = ref({
+  message: '',
+  type: 'success',
+})
 const loading = ref(false)
 const generatingWithLLM = ref(false)
+const buildingDocumentTemplate = ref(false)
 const uploadFile = ref(null)
 const treeViewMode = ref('json')
 const feedbackText = ref('')
@@ -101,12 +129,23 @@ const templateSummary = computed(() => {
     clarity: settings.structure >= 70 ? '清晰' : '灵活',
   }
 })
+const documentFormatJson = computed(() => JSON.stringify(documentFormatConfig.value, null, 2))
+const documentFormatSummary = computed(() => {
+  const config = documentFormatConfig.value
+  return [
+    `模板：${config.style_name || config.template_type}`,
+    `编号：${config.heading_numbering === 'chinese' ? '一、（一）、1.' : '1 / 1.1 / 1.1.1'}`,
+    `正文：${config.body_font} ${config.body_size}pt`,
+    `标题：${config.heading_font} ${config.heading1_size}/${config.heading2_size}/${config.heading3_size}pt`,
+    `段落：首行缩进 ${config.first_line_indent_chars} 字，${config.line_spacing} 倍行距`,
+  ]
+})
 
-function setNotice(message) {
-  notice.value = message
+function setNotice(message, type = 'success') {
+  toast.value = { message, type }
   window.clearTimeout(setNotice.timer)
   setNotice.timer = window.setTimeout(() => {
-    notice.value = ''
+    toast.value = { message: '', type: 'success' }
   }, 3000)
 }
 
@@ -133,7 +172,7 @@ async function handleImportFile(event) {
 async function chooseImprovement(option) {
   selectedImprovement.value = option
   if (!topic.value.trim()) {
-    setNotice('请输入文档主题')
+    setNotice('请输入文档主题', 'warning')
     return
   }
   loading.value = true
@@ -147,13 +186,16 @@ async function chooseImprovement(option) {
         topic: topic.value.trim(),
         use_llm: true,
         library_ids: selectedLibraryIds.value,
-        template_config: templateSettings.value,
+        template_config: {
+          ...templateSettings.value,
+          document_format: documentFormatConfig.value,
+        },
         prompt_delta: option.prompt_delta,
       }),
     })
     setNotice(`已按“${option.label}”更新结构树`)
   } catch (error) {
-    setNotice(error.message)
+    setNotice(error.message, 'error')
   } finally {
     loading.value = false
     generatingWithLLM.value = false
@@ -219,7 +261,7 @@ async function createLibrary() {
     await loadTexts()
     setNotice('文本库已创建')
   } catch (error) {
-    setNotice(error.message)
+    setNotice(error.message, 'error')
   } finally {
     loading.value = false
   }
@@ -227,7 +269,7 @@ async function createLibrary() {
 
 async function deleteSelectedLibrary() {
   if (selectedLibraries.value.length !== 1) {
-    setNotice('请选择一个文本库后再删除')
+    setNotice('请选择一个文本库后再删除', 'warning')
     return
   }
   const library = selectedLibraries.value[0]
@@ -239,7 +281,7 @@ async function deleteSelectedLibrary() {
     await loadTexts()
     setNotice('文本库已删除')
   } catch (error) {
-    setNotice(error.message)
+    setNotice(error.message, 'error')
   } finally {
     loading.value = false
   }
@@ -280,15 +322,93 @@ async function saveTemplateConfig() {
     }
     setNotice('模板配置已保存为默认')
   } catch (error) {
-    setNotice(error.message)
+    setNotice(error.message, 'error')
   } finally {
     loading.value = false
   }
 }
 
+function applyDocumentTemplatePreset(type) {
+  selectedDocumentTemplateType.value = type
+  const presets = {
+    实验报告: {
+      template_type: '实验报告',
+      style_name: '实验报告模板',
+      heading_numbering: 'decimal',
+      cover: true,
+      toc: false,
+      abstract: false,
+      references: false,
+      line_spacing: 1.5,
+      first_line_indent_chars: 2,
+      table_style: 'Table Grid',
+    },
+    结课论文: {
+      template_type: '结课论文',
+      style_name: '结课论文模板',
+      heading_numbering: 'chinese',
+      cover: true,
+      toc: true,
+      abstract: true,
+      references: true,
+      line_spacing: 1.5,
+      first_line_indent_chars: 2,
+      table_style: 'Table Grid',
+    },
+    技术分析报告: {
+      template_type: '技术分析报告',
+      style_name: '技术分析报告模板',
+      heading_numbering: 'decimal',
+      cover: true,
+      toc: true,
+      abstract: false,
+      references: true,
+      line_spacing: 1.35,
+      first_line_indent_chars: 2,
+      table_style: 'Light Shading Accent 1',
+    },
+    项目设计文档: {
+      template_type: '项目设计文档',
+      style_name: '项目设计文档模板',
+      heading_numbering: 'decimal',
+      cover: true,
+      toc: true,
+      abstract: false,
+      references: false,
+      line_spacing: 1.35,
+      first_line_indent_chars: 0,
+      table_style: 'Table Grid',
+    },
+  }
+  documentFormatConfig.value = { ...documentFormatConfig.value, ...presets[type] }
+}
+
+async function buildDocumentTemplate() {
+  loading.value = true
+  buildingDocumentTemplate.value = useLLM.value
+  try {
+    documentFormatConfig.value = await apiFetch('/templates/configs/document-format', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        template_type: selectedDocumentTemplateType.value,
+        requirement: documentTemplateRequirement.value,
+        base_config: documentFormatConfig.value,
+        use_llm: useLLM.value,
+      }),
+    })
+    setNotice(useLLM.value ? 'AI 文档模板已生成' : '文档模板配置已生成')
+  } catch (error) {
+    setNotice(error.message, 'error')
+  } finally {
+    loading.value = false
+    buildingDocumentTemplate.value = false
+  }
+}
+
 async function addText() {
   if (!newText.value.title.trim() || !newText.value.content.trim()) {
-    setNotice('请填写标题和正文')
+    setNotice('请填写标题和正文', 'warning')
     return
   }
   loading.value = true
@@ -302,7 +422,7 @@ async function addText() {
     await loadTexts()
     setNotice('文本已入库')
   } catch (error) {
-    setNotice(error.message)
+    setNotice(error.message, 'error')
   } finally {
     loading.value = false
   }
@@ -316,7 +436,7 @@ async function removeText(id) {
     await loadTexts()
     setNotice('文本已删除')
   } catch (error) {
-    setNotice(error.message)
+    setNotice(error.message, 'error')
   } finally {
     loading.value = false
   }
@@ -324,7 +444,7 @@ async function removeText(id) {
 
 async function uploadSelectedFile() {
   if (!uploadFile.value) {
-    setNotice('请选择文件')
+    setNotice('请选择文件', 'warning')
     return
   }
   const formData = new FormData()
@@ -348,7 +468,7 @@ async function uploadSelectedFile() {
     await loadTexts()
     setNotice('文件已解析入库')
   } catch (error) {
-    setNotice(error.message)
+    setNotice(error.message, 'error')
   } finally {
     loading.value = false
   }
@@ -356,7 +476,7 @@ async function uploadSelectedFile() {
 
 async function generateTree() {
   if (!topic.value.trim()) {
-    setNotice('请输入文档主题')
+    setNotice('请输入文档主题', 'warning')
     return
   }
   loading.value = true
@@ -372,13 +492,16 @@ async function generateTree() {
         topic: topic.value.trim(),
         use_llm: useLLM.value,
         library_ids: selectedLibraryIds.value,
-        template_config: templateSettings.value,
+        template_config: {
+          ...templateSettings.value,
+          document_format: documentFormatConfig.value,
+        },
         prompt_delta: promptDelta,
       }),
     })
     setNotice('结构树已生成')
   } catch (error) {
-    setNotice(error.message)
+    setNotice(error.message, 'error')
   } finally {
     loading.value = false
     generatingWithLLM.value = false
@@ -387,11 +510,11 @@ async function generateTree() {
 
 async function generateImprovementOptions() {
   if (!currentTree.value) {
-    setNotice('请先生成结构树，再生成反馈改进选项')
+    setNotice('请先生成结构树，再生成反馈改进选项', 'warning')
     return
   }
   if (!feedbackText.value.trim()) {
-    setNotice('请先输入反馈内容')
+    setNotice('请先输入反馈内容', 'warning')
     return
   }
   loading.value = true
@@ -411,7 +534,7 @@ async function generateImprovementOptions() {
     showImprovementOptions.value = true
     setNotice('反馈改进选项已生成')
   } catch (error) {
-    setNotice(error.message)
+    setNotice(error.message, 'error')
   } finally {
     loading.value = false
   }
@@ -419,7 +542,7 @@ async function generateImprovementOptions() {
 
 async function generateDocx() {
   if (!currentTree.value) {
-    setNotice('请先生成文档结构树')
+    setNotice('请先生成文档结构树', 'warning')
     return
   }
   loading.value = true
@@ -427,12 +550,16 @@ async function generateDocx() {
     const result = await apiFetch('/documents/docx', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: currentTree.value.title, tree: currentTree.value }),
+      body: JSON.stringify({
+        title: currentTree.value.title,
+        tree: currentTree.value,
+        format_config: documentFormatConfig.value,
+      }),
     })
     downloadUrl.value = `${API_BASE}${result.download_url}`
     setNotice('Word 文档已生成')
   } catch (error) {
-    setNotice(error.message)
+    setNotice(error.message, 'error')
   } finally {
     loading.value = false
   }
@@ -443,7 +570,7 @@ onMounted(async () => {
     await Promise.all([loadLibraries(), loadDefaultTemplateConfig()])
     await loadTexts()
   } catch (error) {
-    setNotice(error.message)
+    setNotice(error.message, 'error')
   }
 })
 </script>
@@ -477,7 +604,12 @@ onMounted(async () => {
       </button>
     </nav>
 
-    <p v-if="notice" class="notice">{{ notice }}</p>
+    <Transition name="toast">
+      <div v-if="toast.message" class="toast" :class="`toast-${toast.type}`" role="status">
+        <span class="toast-dot"></span>
+        <span>{{ toast.message }}</span>
+      </div>
+    </Transition>
 
     <section v-show="activeTab === 'library'" class="module-grid library-module">
       <aside class="panel library-selector">
@@ -507,7 +639,7 @@ onMounted(async () => {
           id="fileInput"
           class="hidden-file-input"
           type="file"
-          accept=".txt,.md,.docx"
+          accept=".txt,.md,.docx,.pdf"
           @change="handleImportFile"
         />
       </aside>
@@ -560,6 +692,70 @@ onMounted(async () => {
         </div>
         <p v-else class="empty">从资料列表中选择一条文本，详情会显示在这里。</p>
       </section>
+    </section>
+
+    <section v-show="activeTab === 'documentTemplate'" class="module-grid document-template-module">
+      <section class="panel format-builder-panel">
+        <div v-if="buildingDocumentTemplate" class="loading-overlay light-loading-overlay">
+          <span class="spinner"></span>
+          <strong>DeepSeek 正在生成文档格式模板</strong>
+          <small>正在分析标题编号、字体、行距和段落格式</small>
+        </div>
+        <div class="panel-head">
+          <div>
+            <p class="section-kicker">Word 格式模板</p>
+            <h2>AI 文档模板构建</h2>
+          </div>
+          <span class="soft-badge">{{ selectedDocumentTemplateType }}</span>
+        </div>
+
+        <div class="template-type-grid">
+          <button
+            v-for="type in documentTemplateTypes"
+            :key="type"
+            type="button"
+            class="template-type-card"
+            :class="{ active: selectedDocumentTemplateType === type }"
+            @click="applyDocumentTemplatePreset(type)"
+          >
+            <strong>{{ type }}</strong>
+            <span>{{ type === '结课论文' ? '摘要、目录、参考文献' : type === '实验报告' ? '过程、结果、表格' : type === '技术分析报告' ? '分析、对比、引用' : '模块、接口、设计说明' }}</span>
+          </button>
+        </div>
+
+        <label class="format-requirement">
+          向 AI 描述格式要求
+          <textarea
+            v-model="documentTemplateRequirement"
+            rows="6"
+            placeholder="例如：正文首行缩进两个中文字符，1.5 倍行距，一级标题黑体三号，正文宋体小四，标题编号用一、（一）、1.，需要目录和参考文献。"
+          ></textarea>
+        </label>
+
+        <div class="format-actions">
+          <label class="switch compact-switch">
+            <input v-model="useLLM" type="checkbox" class="switch-native" />
+            <span class="switch-box"></span>
+            <span class="switch-text">使用 DeepSeek 生成格式</span>
+          </label>
+          <button type="button" class="primary" :disabled="loading" @click="buildDocumentTemplate">
+            生成文档模板配置
+          </button>
+        </div>
+      </section>
+
+      <aside class="panel format-preview-panel">
+        <div class="panel-head">
+          <div>
+            <p class="section-kicker">格式结果</p>
+            <h2>{{ documentFormatConfig.style_name }}</h2>
+          </div>
+        </div>
+        <div class="format-summary-list">
+          <span v-for="item in documentFormatSummary" :key="item">{{ item }}</span>
+        </div>
+        <pre class="format-json">{{ documentFormatJson }}</pre>
+      </aside>
     </section>
 
     <section v-show="activeTab === 'template'" class="module-grid template-module">

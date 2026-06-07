@@ -2,7 +2,7 @@
 @file upload_api.py
 @brief 文件上传入库接口模块。
 
-该模块支持 txt、md、docx 文件上传，并将解析后的文本保存到文本库。
+该模块支持 txt、md、docx、pdf 文件上传，并将解析后的文本保存到文本库。
 
 @author TextTreeDoc 项目组
 @date 2026
@@ -28,13 +28,13 @@ async def upload_file(
     """
     @brief 上传文件并解析入库。
 
-    @param file 上传的 txt、md 或 docx 文件。
+    @param file 上传的 txt、md、docx 或 pdf 文件。
     @return 入库后的文本资料。
     """
     ensure_runtime_dirs()
     suffix = Path(file.filename or "").suffix.lower()
-    if suffix not in {".txt", ".md", ".docx"}:
-        raise HTTPException(status_code=400, detail="仅支持 .txt、.md、.docx 文件")
+    if suffix not in {".txt", ".md", ".docx", ".pdf"}:
+        raise HTTPException(status_code=400, detail="仅支持 .txt、.md、.docx、.pdf 文件")
     save_path = UPLOAD_DIR / Path(file.filename or f"upload{suffix}").name
     save_path.write_bytes(await file.read())
     try:
@@ -42,7 +42,7 @@ async def upload_file(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not content.strip():
-        raise HTTPException(status_code=400, detail="文件内容为空")
+        raise HTTPException(status_code=400, detail="文件内容为空；如果是扫描版 PDF，需要先进行 OCR 识别")
     text = create_text(
         TextCreate(
             title=save_path.stem,

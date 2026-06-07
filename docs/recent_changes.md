@@ -114,8 +114,11 @@ DeepSeek 正在生成结构树
 - 上传 `.txt` 文件。
 - 上传 `.md` 文件。
 - 上传 `.docx` 文件。
+- 上传 `.pdf` 文件。
 
 上传后，系统会解析文件文本内容，并保存到 SQLite 文本库。
+
+PDF 上传支持文字型 PDF；扫描版 PDF 需要先进行 OCR。
 
 资料来源标签含义：
 
@@ -159,4 +162,3 @@ docxtpl / python-docx
 - 不提交生成的 Word 文件。
 
 这些文件已在 `.gitignore` 中配置忽略。
-

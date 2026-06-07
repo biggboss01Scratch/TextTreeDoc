@@ -2,7 +2,7 @@
 @file file_parser.py
 @brief 上传文件解析模块。
 
-该模块负责解析 txt、md 和 docx 文件内容，并将其转换为可入库的纯文本。
+该模块负责解析 txt、md、docx 和 pdf 文件内容，并将其转换为可入库的纯文本。
 
 @author TextTreeDoc 项目组
 @date 2026
@@ -11,6 +11,7 @@
 from pathlib import Path
 
 from docx import Document
+from pypdf import PdfReader
 
 
 def parse_uploaded_file(path: Path) -> str:
@@ -27,5 +28,8 @@ def parse_uploaded_file(path: Path) -> str:
     if suffix == ".docx":
         document = Document(path)
         return "\n".join(paragraph.text for paragraph in document.paragraphs if paragraph.text.strip())
-    raise ValueError("仅支持 .txt、.md、.docx 文件")
-
+    if suffix == ".pdf":
+        reader = PdfReader(path)
+        pages = [page.extract_text() or "" for page in reader.pages]
+        return "\n".join(page.strip() for page in pages if page.strip())
+    raise ValueError("仅支持 .txt、.md、.docx、.pdf 文件")

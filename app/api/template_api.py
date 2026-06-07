@@ -5,7 +5,12 @@
 
 from fastapi import APIRouter, HTTPException
 
-from app.models.schemas import TemplateConfigCreate, TemplateConfigOut, TemplateConfigUpdate
+from app.models.schemas import (
+    DocumentTemplateBuildRequest,
+    TemplateConfigCreate,
+    TemplateConfigOut,
+    TemplateConfigUpdate,
+)
 from app.services import template_service
 
 router = APIRouter(prefix="/templates/configs", tags=["template-configs"])
@@ -84,3 +89,19 @@ def delete_template_config(config_id: int) -> dict:
         return {"ok": True}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/document-format")
+def build_document_format_config(request: DocumentTemplateBuildRequest) -> dict:
+    """
+    @brief 根据基础模板和用户格式需求生成 Word 格式配置。
+
+    @param request 包含模板类型、自然语言格式需求和是否使用大模型。
+    @return 文档格式配置 JSON。
+    """
+    return template_service.build_document_format_config(
+        request.template_type,
+        request.requirement,
+        request.base_config,
+        request.use_llm,
+    )

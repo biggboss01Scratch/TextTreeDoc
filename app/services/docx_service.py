@@ -28,6 +28,20 @@ BODY_FONT = "宋体"
 HEADING_FONT = "黑体"
 ASCII_FONT = "Times New Roman"
 TEXT_COLOR = RGBColor(0, 0, 0)
+DEFAULT_FORMAT_CONFIG: dict[str, Any] = {
+    "heading_numbering": "decimal",
+    "body_font": BODY_FONT,
+    "heading_font": HEADING_FONT,
+    "ascii_font": ASCII_FONT,
+    "body_size": 11,
+    "heading1_size": 16,
+    "heading2_size": 14,
+    "heading3_size": 12,
+    "line_spacing": 1.5,
+    "first_line_indent_chars": 2,
+    "paragraph_space_after": 6,
+    "table_style": "Table Grid",
+}
 
 
 def ensure_report_template() -> None:
@@ -54,7 +68,7 @@ def ensure_report_template() -> None:
     document.save(REPORT_TEMPLATE_PATH)
 
 
-def generate_docx_from_tree(title: str, tree: dict[str, Any]) -> dict:
+def generate_docx_from_tree(title: str, tree: dict[str, Any], format_config: dict[str, Any] | None = None) -> dict:
     """
     @brief 根据文档结构树生成 docx 文件。
 
@@ -62,6 +76,7 @@ def generate_docx_from_tree(title: str, tree: dict[str, Any]) -> dict:
     @param tree 文档结构树，包含 title、sections、children 和 blocks 字段。
     @return 包含 filename、path 和 download_url 的字典。
     """
+    config = _merge_format_config(format_config)
     ensure_report_template()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"report_{timestamp}.docx"
@@ -72,10 +87,10 @@ def generate_docx_from_tree(title: str, tree: dict[str, Any]) -> dict:
     template.save(output_path)
 
     document = Document(output_path)
-    _configure_document_styles(document)
-    _normalize_existing_paragraphs(document)
-    for section in tree.get("sections", []):
-        _append_section(document, section, level=1)
+    _configure_document_styles(document, config)
+    _normalize_existing_paragraphs(document, config)
+    for index, section in enumerate(tree.get("sections", []), 1):
+        _append_section(document, section, level=1, config=config, path=[index])
     document.save(output_path)
     _save_document_record(title, tree, output_path)
     return {
@@ -85,7 +100,13 @@ def generate_docx_from_tree(title: str, tree: dict[str, Any]) -> dict:
     }
 
 
-def _append_section(document: Document, section: dict[str, Any], level: int) -> None:
+def _append_section(
+    document: Document,
+    section: dict[str, Any],
+    level: int,
+    config: dict[str, Any],
+    path: list[int],
+) -> None:
     """
     @brief 递归追加文档章节。
 
@@ -96,19 +117,33 @@ def _append_section(document: Document, section: dict[str, Any], level: int) -> 
     """
     heading = section.get("heading")
     if heading:
-        paragraph = document.add_heading(heading, level=min(level, 4))
-        _apply_paragraph_font(paragraph, HEADING_FONT, size=max(12, 18 - level * 2), bold=True)
+        paragraph = document.add_heading(_format_heading(heading, level, path, config), level=min(level, 4))
+        _apply_paragraph_font(
+            paragraph,
+            config["heading_font"],
+            config["ascii_font"],
+            size=_heading_size(level, config),
+            bold=True,
+        )
     content = section.get("content")
     if content:
         paragraph = document.add_paragraph(content)
-        _apply_paragraph_font(paragraph, BODY_FONT, size=11)
+        _apply_paragraph_font(
+            paragraph,
+            config["body_font"],
+            config["ascii_font"],
+            size=config["body_size"],
+            first_line_indent_chars=config["first_line_indent_chars"],
+            line_spacing=config["line_spacing"],
+            space_after=config["paragraph_space_after"],
+        )
     for block in section.get("blocks", []):
-        _append_block(document, block)
-    for child in section.get("children", []):
-        _append_section(document, child, level=level + 1)
+        _append_block(document, block, config)
+    for index, child in enumerate(section.get("children", []), 1):
+        _append_section(document, child, level=level + 1, config=config, path=[*path, index])
 
 
-def _append_block(document: Document, block: dict[str, Any]) -> None:
+def _append_block(document: Document, block: dict[str, Any], config: dict[str, Any]) -> None:
     """
     @brief 将结构树 block 写入 Word。
 
@@ -122,15 +157,18 @@ def _append_block(document: Document, block: dict[str, Any]) -> None:
         if not headers:
             return
         table = document.add_table(rows=1, cols=len(headers))
-        table.style = "Table Grid"
+        try:
+            table.style = config["table_style"]
+        except (KeyError, ValueError):
+            table.style = "Table Grid"
         for index, header in enumerate(headers):
             table.rows[0].cells[index].text = str(header)
-            _apply_cell_font(table.rows[0].cells[index], BODY_FONT, bold=True)
+            _apply_cell_font(table.rows[0].cells[index], config, bold=True)
         for row in rows:
             cells = table.add_row().cells
             for index, value in enumerate(row[: len(headers)]):
                 cells[index].text = str(value)
-                _apply_cell_font(cells[index], BODY_FONT)
+                _apply_cell_font(cells[index], config)
 
 
 def _template_is_current() -> bool:
@@ -146,29 +184,35 @@ def _template_is_current() -> bool:
     return document.core_properties.comments == TEMPLATE_VERSION
 
 
-def _configure_document_styles(document: Document) -> None:
+def _configure_document_styles(document: Document, config: dict[str, Any] | None = None) -> None:
     """
     @brief 配置 Word 文档的中文正文和标题样式。
 
     @param document python-docx 文档对象。
     @return None。
     """
+    config = _merge_format_config(config)
     normal = document.styles["Normal"]
-    normal.font.name = ASCII_FONT
-    normal.font.size = Pt(11)
+    normal.font.name = config["ascii_font"]
+    normal.font.size = Pt(config["body_size"])
     normal.font.color.rgb = TEXT_COLOR
-    normal._element.rPr.rFonts.set(qn("w:eastAsia"), BODY_FONT)
-    for style_name, size in (("Title", 22), ("Heading 1", 16), ("Heading 2", 14), ("Heading 3", 12)):
+    normal._element.rPr.rFonts.set(qn("w:eastAsia"), config["body_font"])
+    for style_name, size in (
+        ("Title", config["heading1_size"] + 6),
+        ("Heading 1", config["heading1_size"]),
+        ("Heading 2", config["heading2_size"]),
+        ("Heading 3", config["heading3_size"]),
+    ):
         if style_name in document.styles:
             style = document.styles[style_name]
-            style.font.name = ASCII_FONT
+            style.font.name = config["ascii_font"]
             style.font.size = Pt(size)
             style.font.bold = True
             style.font.color.rgb = TEXT_COLOR
-            style._element.rPr.rFonts.set(qn("w:eastAsia"), HEADING_FONT)
+            style._element.rPr.rFonts.set(qn("w:eastAsia"), config["heading_font"])
 
 
-def _normalize_existing_paragraphs(document: Document) -> None:
+def _normalize_existing_paragraphs(document: Document, config: dict[str, Any] | None = None) -> None:
     """
     @brief 统一模板渲染后已有段落的字体和颜色。
 
@@ -178,17 +222,39 @@ def _normalize_existing_paragraphs(document: Document) -> None:
     docxtpl 渲染出的封面标题和生成时间来自模板段落，需要额外规范 run，
     避免 Word 主题样式造成中文字体或颜色不一致。
     """
+    config = _merge_format_config(config)
     for paragraph in document.paragraphs:
         style_name = paragraph.style.name if paragraph.style else ""
         if style_name == "Title":
-            _apply_paragraph_font(paragraph, HEADING_FONT, size=22, bold=True)
+            _apply_paragraph_font(
+                paragraph,
+                config["heading_font"],
+                config["ascii_font"],
+                size=config["heading1_size"] + 6,
+                bold=True,
+            )
         elif style_name.startswith("Heading"):
-            _apply_paragraph_font(paragraph, HEADING_FONT, size=16, bold=True)
+            _apply_paragraph_font(
+                paragraph,
+                config["heading_font"],
+                config["ascii_font"],
+                size=config["heading1_size"],
+                bold=True,
+            )
         else:
-            _apply_paragraph_font(paragraph, BODY_FONT, size=11)
+            _apply_paragraph_font(paragraph, config["body_font"], config["ascii_font"], size=config["body_size"])
 
 
-def _apply_paragraph_font(paragraph, east_asia_font: str, size: int = 11, bold: bool = False) -> None:
+def _apply_paragraph_font(
+    paragraph,
+    east_asia_font: str,
+    ascii_font: str = ASCII_FONT,
+    size: float = 11,
+    bold: bool = False,
+    first_line_indent_chars: float | None = None,
+    line_spacing: float | None = None,
+    space_after: float | None = None,
+) -> None:
     """
     @brief 为段落中的所有 run 设置中英文字体。
 
@@ -199,14 +265,20 @@ def _apply_paragraph_font(paragraph, east_asia_font: str, size: int = 11, bold: 
     @return None。
     """
     for run in paragraph.runs:
-        run.font.name = ASCII_FONT
+        run.font.name = ascii_font
         run.font.size = Pt(size)
         run.font.bold = bold
         run.font.color.rgb = TEXT_COLOR
         run._element.rPr.rFonts.set(qn("w:eastAsia"), east_asia_font)
+    if first_line_indent_chars is not None:
+        paragraph.paragraph_format.first_line_indent = Pt(size * first_line_indent_chars)
+    if line_spacing is not None:
+        paragraph.paragraph_format.line_spacing = line_spacing
+    if space_after is not None:
+        paragraph.paragraph_format.space_after = Pt(space_after)
 
 
-def _apply_cell_font(cell, east_asia_font: str, bold: bool = False) -> None:
+def _apply_cell_font(cell, config: dict[str, Any], bold: bool = False) -> None:
     """
     @brief 设置表格单元格字体。
 
@@ -216,7 +288,124 @@ def _apply_cell_font(cell, east_asia_font: str, bold: bool = False) -> None:
     @return None。
     """
     for paragraph in cell.paragraphs:
-        _apply_paragraph_font(paragraph, east_asia_font, size=10.5, bold=bold)
+        _apply_paragraph_font(
+            paragraph,
+            config["body_font"],
+            config["ascii_font"],
+            size=max(9, config["body_size"] - 0.5),
+            bold=bold,
+            line_spacing=1.15,
+            space_after=0,
+        )
+
+
+def _merge_format_config(config: dict[str, Any] | None) -> dict[str, Any]:
+    """
+    @brief 合并并规范化 Word 格式配置。
+
+    @param config 外部格式配置。
+    @return 完整格式配置。
+    """
+    merged = dict(DEFAULT_FORMAT_CONFIG)
+    if config:
+        merged.update(config)
+    for key in ("body_size", "heading1_size", "heading2_size", "heading3_size", "paragraph_space_after"):
+        merged[key] = _as_float(merged.get(key), DEFAULT_FORMAT_CONFIG[key])
+    merged["first_line_indent_chars"] = _as_float(merged.get("first_line_indent_chars"), 2)
+    merged["line_spacing"] = _as_float(merged.get("line_spacing"), 1.5)
+    for key in ("body_font", "heading_font", "ascii_font", "table_style", "heading_numbering"):
+        merged[key] = str(merged.get(key) or DEFAULT_FORMAT_CONFIG[key])
+    return merged
+
+
+def _as_float(value: Any, default: float) -> float:
+    """
+    @brief 将值转换为浮点数。
+
+    @param value 原始值。
+    @param default 默认值。
+    @return 浮点数。
+    """
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _heading_size(level: int, config: dict[str, Any]) -> float:
+    """
+    @brief 根据标题层级获取字号。
+
+    @param level 标题层级。
+    @param config 格式配置。
+    @return 字号。
+    """
+    if level <= 1:
+        return config["heading1_size"]
+    if level == 2:
+        return config["heading2_size"]
+    return config["heading3_size"]
+
+
+def _format_heading(heading: str, level: int, path: list[int], config: dict[str, Any]) -> str:
+    """
+    @brief 根据编号样式格式化标题文本。
+
+    @param heading 原始标题。
+    @param level 标题层级。
+    @param path 章节序号路径。
+    @param config 格式配置。
+    @return 格式化标题。
+    """
+    title = _strip_heading_prefix(heading)
+    if config.get("heading_numbering") == "chinese":
+        prefix = _chinese_heading_prefix(level, path)
+    else:
+        prefix = ".".join(str(item) for item in path) + " "
+    return f"{prefix}{title}"
+
+
+def _strip_heading_prefix(heading: str) -> str:
+    """
+    @brief 移除已有标题编号。
+
+    @param heading 原始标题。
+    @return 去掉编号后的标题。
+    """
+    import re
+
+    return re.sub(r"^(\d+(?:\.\d+)*[.、]?\s*|[一二三四五六七八九十]+、\s*|（[一二三四五六七八九十]+）\s*)", "", heading).strip()
+
+
+def _chinese_heading_prefix(level: int, path: list[int]) -> str:
+    """
+    @brief 生成中文混合编号前缀。
+
+    @param level 标题层级。
+    @param path 章节序号路径。
+    @return 编号前缀。
+    """
+    if level <= 1:
+        return f"{_to_chinese_number(path[0])}、"
+    if level == 2:
+        return f"（{_to_chinese_number(path[-1])}）"
+    return f"{path[-1]}. "
+
+
+def _to_chinese_number(number: int) -> str:
+    """
+    @brief 将 1 到 99 的数字转换为中文序号。
+
+    @param number 数字。
+    @return 中文数字。
+    """
+    digits = "零一二三四五六七八九"
+    if number <= 10:
+        return "十" if number == 10 else digits[number]
+    if number < 20:
+        return f"十{digits[number % 10]}"
+    tens, ones = divmod(number, 10)
+    return f"{digits[tens]}十{digits[ones] if ones else ''}"
 
 
 def _save_document_record(title: str, tree: dict[str, Any], output_path: Path) -> None:

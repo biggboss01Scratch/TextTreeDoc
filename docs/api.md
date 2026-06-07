@@ -28,7 +28,9 @@
 
 ### POST /upload
 
-使用 `multipart/form-data` 上传 `.txt`、`.md` 或 `.docx` 文件。
+使用 `multipart/form-data` 上传 `.txt`、`.md`、`.docx` 或 `.pdf` 文件。
+
+PDF 上传支持文字型 PDF 的文本提取；扫描版 PDF 需要先进行 OCR。
 
 ## 文档生成
 
@@ -56,4 +58,3 @@
 ### GET /documents/download/{filename}
 
 下载生成的 docx 文件。
-

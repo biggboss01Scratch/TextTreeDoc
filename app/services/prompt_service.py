@@ -35,6 +35,9 @@ def get_default_generation_prompt_template() -> str:
 - 表格使用程度：{tables}/100
 - 创新扩展程度：{creativity}/100
 
+Word 格式模板配置：
+{document_format}
+
 额外改进要求：
 {prompt_delta}
 
@@ -44,6 +47,8 @@ def get_default_generation_prompt_template() -> str:
 - sections 中每个章节包含 heading、content、children。
 - 可以包含 blocks。
 - blocks 支持 table 类型，table 必须包含 headers 和 rows。
+- 如果 Word 格式模板要求摘要、目录或参考文献，可以在结构树中体现相应章节。
+- 标题编号风格要尽量匹配 Word 格式模板配置。
 """
 
 
@@ -74,6 +79,7 @@ def build_generation_prompt(
         evidence=merged_config["evidence"],
         tables=merged_config["tables"],
         creativity=merged_config["creativity"],
+        document_format=json.dumps(merged_config.get("document_format", {}), ensure_ascii=False, indent=2),
         prompt_delta=prompt_delta or "无",
     )
 

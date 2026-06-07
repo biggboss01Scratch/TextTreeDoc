@@ -40,3 +40,10 @@
 - 使用方式：作为 npm 依赖使用，未复制其源码
 - 备注：
 
+## 6. pypdf
+
+- 项目地址：https://github.com/py-pdf/pypdf
+- License：BSD-3-Clause
+- 用途：提取文字型 PDF 文件中的文本内容
+- 使用方式：作为 Python 依赖使用，未复制其源码
+- 备注：不包含 OCR 能力，扫描版 PDF 需要额外 OCR 处理
