@@ -15,7 +15,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.api import document_api, library_api, template_api, text_api, upload_api
+from app.api import document_api, image_api, library_api, template_api, text_api, upload_api
 from app.core.config import FRONTEND_DIST_DIR, PROJECT_ROOT, load_local_env
 from app.core.database import init_db
 
@@ -24,7 +24,7 @@ app = FastAPI(title="TextTreeDoc", description="基于文本库的文档结构�
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],
+    allow_origin_regex=r"^http://(127\.0\.0\.1|localhost):517\d$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -33,6 +33,7 @@ app.add_middleware(
 app.include_router(text_api.router)
 app.include_router(upload_api.router)
 app.include_router(document_api.router)
+app.include_router(image_api.router)
 app.include_router(library_api.router)
 app.include_router(template_api.router)
 

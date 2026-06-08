@@ -30,21 +30,56 @@ DEFAULT_DOCUMENT_FORMAT: dict[str, Any] = {
     "template_type": "课程报告",
     "style_name": "规范课程报告",
     "heading_numbering": "decimal",
-    "cover": True,
+    "cover": False,
+    "cover_style": "none",
     "toc": False,
     "abstract": False,
     "references": False,
     "body_font": "宋体",
     "heading_font": "黑体",
     "ascii_font": "Times New Roman",
-    "body_size": 11,
+    "body_size": 12,
     "heading1_size": 16,
     "heading2_size": 14,
     "heading3_size": 12,
     "line_spacing": 1.5,
+    "line_spacing_rule": {"type": "multiple", "value": 1.5, "unit": "line"},
     "first_line_indent_chars": 2,
     "paragraph_space_after": 6,
+    "body_space_before": {"value": 0, "unit": "pt"},
+    "body_space_after": {"value": 6, "unit": "pt"},
+    "heading1_space_before": {"value": 18, "unit": "pt"},
+    "heading1_space_after": {"value": 12, "unit": "pt"},
+    "heading2_space_before": {"value": 12, "unit": "pt"},
+    "heading2_space_after": {"value": 6, "unit": "pt"},
+    "heading3_space_before": {"value": 6, "unit": "pt"},
+    "heading3_space_after": {"value": 6, "unit": "pt"},
     "table_style": "Table Grid",
+    "table_title_font": "黑体",
+    "table_title_size": 12,
+    "table_body_font": "宋体",
+    "table_body_size": 10.5,
+    "figure_title_font": "宋体",
+    "figure_title_size": 12,
+}
+
+CHINESE_FONT_SIZE_TO_PT = {
+    "初号": 42,
+    "小初": 36,
+    "一号": 26,
+    "小一": 24,
+    "二号": 22,
+    "小二": 18,
+    "三号": 16,
+    "小三": 15,
+    "四号": 14,
+    "小四": 12,
+    "五号": 10.5,
+    "小五": 9,
+    "六号": 7.5,
+    "小六": 6.5,
+    "七号": 5.5,
+    "八号": 5,
 }
 
 DOCUMENT_TEMPLATE_PRESETS: dict[str, dict[str, Any]] = {
@@ -52,7 +87,8 @@ DOCUMENT_TEMPLATE_PRESETS: dict[str, dict[str, Any]] = {
         "template_type": "实验报告",
         "style_name": "实验报告模板",
         "heading_numbering": "decimal",
-        "cover": True,
+        "cover": False,
+        "cover_style": "none",
         "toc": False,
         "abstract": False,
         "references": False,
@@ -64,7 +100,8 @@ DOCUMENT_TEMPLATE_PRESETS: dict[str, dict[str, Any]] = {
         "template_type": "结课论文",
         "style_name": "结课论文模板",
         "heading_numbering": "chinese",
-        "cover": True,
+        "cover": False,
+        "cover_style": "none",
         "toc": True,
         "abstract": True,
         "references": True,
@@ -76,7 +113,8 @@ DOCUMENT_TEMPLATE_PRESETS: dict[str, dict[str, Any]] = {
         "template_type": "技术分析报告",
         "style_name": "技术分析报告模板",
         "heading_numbering": "decimal",
-        "cover": True,
+        "cover": False,
+        "cover_style": "none",
         "toc": True,
         "abstract": False,
         "references": True,
@@ -88,7 +126,8 @@ DOCUMENT_TEMPLATE_PRESETS: dict[str, dict[str, Any]] = {
         "template_type": "项目设计文档",
         "style_name": "项目设计文档模板",
         "heading_numbering": "decimal",
-        "cover": True,
+        "cover": False,
+        "cover_style": "none",
         "toc": True,
         "abstract": False,
         "references": False,
@@ -270,6 +309,43 @@ def build_document_format_config(
     return merged
 
 
+def analyze_format_document(
+    content: str,
+    base_config: dict[str, Any] | None = None,
+    use_llm: bool = False,
+) -> dict[str, Any]:
+    """
+    @brief 分析格式规范文本，抽取格式配置、结构要求和元信息字段。
+
+    @param content 格式规范文本。
+    @param base_config 当前格式配置。
+    @param use_llm 是否预留使用大模型分析。
+    @return 分析结果。
+    """
+    config = dict(DEFAULT_DOCUMENT_FORMAT)
+    if base_config:
+        config.update(base_config)
+    extracted_rules: list[str] = []
+    warnings: list[str] = []
+    text = content or ""
+    _apply_font_size_requirement(config, text)
+    _apply_spacing_requirement(config, text)
+    _apply_format_document_rules(config, text, extracted_rules)
+    structure_requirements = _extract_structure_requirements(text)
+    metadata_fields = _extract_metadata_fields(text)
+    if use_llm:
+        warnings.append("当前版本先使用规则解析；AI 深度解析将在后续版本接入。")
+    if not extracted_rules:
+        warnings.append("未识别到明确格式规则，请检查规范文本是否包含字体、字号、行距等说明。")
+    return {
+        "format_config": _normalize_document_format(config),
+        "structure_requirements": structure_requirements,
+        "metadata_fields": metadata_fields,
+        "extracted_rules": extracted_rules,
+        "warnings": warnings,
+    }
+
+
 def _build_fallback_document_format(
     template_type: str,
     requirement: str | None,
@@ -312,6 +388,8 @@ def _build_fallback_document_format(
         config["heading_numbering"] = "chinese"
     if "1.1" in text or "阿拉伯" in text:
         config["heading_numbering"] = "decimal"
+    _apply_font_size_requirement(config, text)
+    _apply_spacing_requirement(config, text)
     return _normalize_document_format(config)
 
 
@@ -333,28 +411,41 @@ def _build_document_format_prompt(template_type: str, requirement: str, fallback
   "style_name": "模板名称",
   "heading_numbering": "decimal 或 chinese",
   "cover": true,
+  "cover_style": "none 或 wuhan_cs_course_design",
   "toc": true,
   "abstract": false,
   "references": false,
   "body_font": "宋体",
   "heading_font": "黑体",
   "ascii_font": "Times New Roman",
-  "body_size": 11,
+  "body_size": 12,
   "heading1_size": 16,
   "heading2_size": 14,
   "heading3_size": 12,
   "line_spacing": 1.5,
+  "line_spacing_rule": {{"type": "multiple", "value": 1.5, "unit": "line"}},
   "first_line_indent_chars": 2,
   "paragraph_space_after": 6,
+  "body_space_before": {{"value": 0, "unit": "pt"}},
+  "body_space_after": {{"value": 6, "unit": "pt"}},
+  "heading1_space_before": {{"value": 18, "unit": "pt"}},
+  "heading1_space_after": {{"value": 12, "unit": "pt"}},
+  "heading2_space_before": {{"value": 12, "unit": "pt"}},
+  "heading2_space_after": {{"value": 6, "unit": "pt"}},
+  "heading3_space_before": {{"value": 6, "unit": "pt"}},
+  "heading3_space_after": {{"value": 6, "unit": "pt"}},
   "table_style": "Table Grid"
 }}
 
 约束：
-1. 字号必须是数字，单位为 pt。
+1. 字号必须是数字，单位为 pt。中文字号映射：三号=16pt，小三=15pt，四号=14pt，小四=12pt，五号=10.5pt，小五=9pt。
 2. line_spacing 必须是 1.0、1.25、1.35、1.5、2.0 之一。
 3. first_line_indent_chars 表示正文段首缩进几个中文字符。
 4. heading_numbering 为 decimal 表示 1 / 1.1 / 1.1.1；chinese 表示 一、/ （一）/ 1.
-5. 如果用户需求不完整，请基于基础模板给出合理默认值。
+5. body_space_before/body_space_after 和 heading*_space_before/after 表示段前段后间距。
+6. 段前段后间距必须使用对象结构：{{"value": 数字, "unit": "pt 或 line"}}。pt 表示磅，line 表示行。
+7. 如果用户写“磅”，unit 用 pt；如果用户写“行”，unit 用 line。
+8. 如果用户需求不完整，请基于基础模板给出合理默认值。
 
 基础模板类型：{template_type}
 用户需求：{requirement or "无"}
@@ -377,7 +468,7 @@ def _normalize_document_format(config: dict[str, Any]) -> dict[str, Any]:
     for key in ("cover", "toc", "abstract", "references"):
         normalized[key] = bool(normalized.get(key))
     for key, default in (
-        ("body_size", 11),
+        ("body_size", 12),
         ("heading1_size", 16),
         ("heading2_size", 14),
         ("heading3_size", 12),
@@ -385,9 +476,27 @@ def _normalize_document_format(config: dict[str, Any]) -> dict[str, Any]:
         ("first_line_indent_chars", 2),
     ):
         normalized[key] = _coerce_number(normalized.get(key), default)
+    if "body_space_after" not in normalized and "paragraph_space_after" in normalized:
+        normalized["body_space_after"] = {"value": normalized["paragraph_space_after"], "unit": "pt"}
+    for key in (
+        "body_space_before",
+        "body_space_after",
+        "heading1_space_before",
+        "heading1_space_after",
+        "heading2_space_before",
+        "heading2_space_after",
+        "heading3_space_before",
+        "heading3_space_after",
+    ):
+        normalized[key] = _normalize_spacing_setting(normalized.get(key), DEFAULT_DOCUMENT_FORMAT[key])
     normalized["line_spacing"] = _closest_line_spacing(normalized.get("line_spacing"))
-    for key in ("body_font", "heading_font", "ascii_font", "table_style", "template_type", "style_name"):
+    normalized["line_spacing_rule"] = _normalize_line_spacing_rule(normalized.get("line_spacing_rule"), normalized["line_spacing"])
+    for key in ("body_font", "heading_font", "ascii_font", "table_style", "template_type", "style_name", "cover_style"):
         normalized[key] = str(normalized.get(key) or DEFAULT_DOCUMENT_FORMAT[key])
+    for key in ("table_title_font", "table_body_font", "figure_title_font"):
+        normalized[key] = str(normalized.get(key) or DEFAULT_DOCUMENT_FORMAT[key])
+    for key, default in (("table_title_size", 12), ("table_body_size", 10.5), ("figure_title_size", 12)):
+        normalized[key] = _coerce_number(normalized.get(key), default)
     return normalized
 
 
@@ -405,6 +514,198 @@ def _coerce_number(value: Any, default: float) -> float:
         return float(default)
 
 
+def _normalize_spacing_setting(value: Any, default: dict[str, Any]) -> dict[str, Any]:
+    """
+    @brief 规范段前段后间距配置。
+
+    @param value 原始值。
+    @param default 默认值。
+    @return {"value": 数字, "unit": "pt/line"}。
+    """
+    if isinstance(value, dict):
+        number = _coerce_number(value.get("value"), default["value"])
+        unit = str(value.get("unit") or default["unit"]).lower()
+    else:
+        number = _coerce_number(value, default["value"])
+        unit = str(default["unit"]).lower()
+    if unit in ("磅", "point", "points"):
+        unit = "pt"
+    if unit in ("行", "lines"):
+        unit = "line"
+    if unit not in ("pt", "line"):
+        unit = default["unit"]
+    return {"value": max(0, number), "unit": unit}
+
+
+def _apply_spacing_requirement(config: dict[str, Any], text: str) -> None:
+    """
+    @brief 从用户自然语言中提取常见段前段后间距。
+
+    @param config 当前格式配置。
+    @param text 用户需求。
+    @return None。
+    """
+    level_aliases = {
+        "heading1": ("一级标题", "一标题", "1级标题"),
+        "heading2": ("二级标题", "二标题", "2级标题"),
+        "heading3": ("三级标题", "三标题", "3级标题"),
+        "body": ("正文",),
+    }
+    edge_aliases = {"before": ("段前",), "after": ("段后",)}
+    for target, aliases in level_aliases.items():
+        for edge, edge_words in edge_aliases.items():
+            for alias in aliases:
+                for edge_word in edge_words:
+                    match = re.search(
+                        rf"{alias}[^，。,；;\n]*{edge_word}\s*(\d+(?:\.\d+)?)\s*(磅|pt|行)?",
+                        text,
+                        flags=re.I,
+                    )
+                    if match:
+                        unit = match.group(2) or "pt"
+                        if unit == "磅":
+                            unit = "pt"
+                        config[f"{target}_space_{edge}"] = {
+                            "value": float(match.group(1)),
+                            "unit": "line" if unit == "行" else unit.lower(),
+                        }
+
+
+def _apply_font_size_requirement(config: dict[str, Any], text: str) -> None:
+    """
+    @brief 从自然语言中解析中文字号。
+
+    @param config 当前格式配置。
+    @param text 用户需求。
+    @return None。
+    """
+    for label, size in CHINESE_FONT_SIZE_TO_PT.items():
+        if f"正文{label}" in text or f"正文字号{label}" in text or f"正文为{label}" in text or f"正文用{label}" in text:
+            config["body_size"] = size
+        if f"一级标题{label}" in text or f"一级标题字号{label}" in text or f"一级标题用{label}" in text:
+            config["heading1_size"] = size
+        if f"二级标题{label}" in text or f"二级标题字号{label}" in text or f"二级标题用{label}" in text:
+            config["heading2_size"] = size
+        if f"三级标题{label}" in text or f"三级标题字号{label}" in text or f"三级标题用{label}" in text:
+            config["heading3_size"] = size
+    title_match = re.search(r"标题[^，。,；;\n]*(初号|小初|小一|小二|小三|小四|小五|小六|一号|二号|三号|四号|五号|六号|七号|八号)", text)
+    if title_match and not any(word in text for word in ("一级标题", "二级标题", "三级标题")):
+        config["heading1_size"] = CHINESE_FONT_SIZE_TO_PT[title_match.group(1)]
+    body_match = re.search(r"正文[^，。,；;\n]*(初号|小初|小一|小二|小三|小四|小五|小六|一号|二号|三号|四号|五号|六号|七号|八号)", text)
+    if body_match:
+        config["body_size"] = CHINESE_FONT_SIZE_TO_PT[body_match.group(1)]
+
+
+def _apply_format_document_rules(config: dict[str, Any], text: str, extracted_rules: list[str]) -> None:
+    """
+    @brief 从格式规范全文中提取常见格式规则。
+
+    @param config 当前格式配置。
+    @param text 规范文本。
+    @param extracted_rules 已识别规则说明列表。
+    @return None。
+    """
+    if "正文行间距固定为23磅" in text or re.search(r"正文[^。；;\n]*行间距固定为\s*23\s*磅", text):
+        config["line_spacing_rule"] = {"type": "exact", "value": 23, "unit": "pt"}
+        config["line_spacing"] = 1.5
+        extracted_rules.append("正文行间距：固定 23 磅")
+    line_match = re.search(r"行间距固定为\s*(\d+(?:\.\d+)?)\s*磅", text)
+    if line_match and not any(rule.startswith("正文行间距") for rule in extracted_rules):
+        config["line_spacing_rule"] = {"type": "exact", "value": float(line_match.group(1)), "unit": "pt"}
+        extracted_rules.append(f"固定行距：{line_match.group(1)} 磅")
+    if "正文" in text and "宋体" in text and ("小4" in text or "小四" in text):
+        config["body_font"] = "宋体"
+        config["body_size"] = 12
+        extracted_rules.append("正文：宋体小四")
+    if "黑体小2" in text or "黑体小二" in text:
+        config["heading_font"] = "黑体"
+        config["heading1_size"] = 18
+        extracted_rules.append("章标题：黑体小二")
+    if "黑体4号" in text or "黑体四号" in text:
+        config["heading2_size"] = 14
+        extracted_rules.append("节标题：黑体四号")
+    if "黑体小4" in text or "黑体小四" in text:
+        config["heading3_size"] = 12
+        extracted_rules.append("三级标题：黑体小四")
+    chapter_spacing = re.search(
+        r"章标题段前为\s*(\d+(?:\.\d+)?)\s*行[、,，]\s*段后为\s*(\d+(?:\.\d+)?)\s*行",
+        text,
+    )
+    if chapter_spacing:
+        config["heading1_space_before"] = {"value": float(chapter_spacing.group(1)), "unit": "line"}
+        config["heading1_space_after"] = {"value": float(chapter_spacing.group(2)), "unit": "line"}
+        extracted_rules.append(
+            f"章标题段前 {chapter_spacing.group(1)} 行，段后 {chapter_spacing.group(2)} 行"
+        )
+    if "表标题中文黑体小4" in text or "表标题中文黑体小四" in text:
+        config["table_title_font"] = "黑体"
+        config["table_title_size"] = 12
+        extracted_rules.append("表标题：中文黑体小四")
+    if "表内容宋体" in text and ("5号" in text or "五号" in text):
+        config["table_body_font"] = "宋体"
+        config["table_body_size"] = 10.5
+        extracted_rules.append("表内容：宋体五号")
+    if "图" in text and ("图1.2" in text or "图2.2" in text):
+        config["figure_title_font"] = "宋体"
+        config["figure_title_size"] = 12
+        extracted_rules.append("图题：按章节编号生成")
+    if "目录" in text:
+        config["toc"] = True
+    if "摘要" in text:
+        config["abstract"] = True
+    if "参考文献" in text:
+        config["references"] = True
+    if "封面" in text:
+        config["cover"] = True
+        config["cover_style"] = "wuhan_cs_course_design"
+        extracted_rules.append("封面：武汉大学计算机学院课程设计封面样式")
+
+
+def _extract_structure_requirements(text: str) -> list[dict[str, Any]]:
+    """
+    @brief 从规范文本中提取结构要求。
+
+    @param text 规范文本。
+    @return 结构要求列表。
+    """
+    candidates = [
+        ("cover", "封面"),
+        ("declaration", "学术声明"),
+        ("abstract", "中文摘要"),
+        ("keywords", "关键词"),
+        ("toc", "目录"),
+        ("body", "正文"),
+        ("conclusion", "结论"),
+        ("references", "参考文献"),
+        ("appendix", "附录"),
+        ("teacher_comment", "教师评语评分"),
+    ]
+    return [{"key": key, "label": label} for key, label in candidates if label in text]
+
+
+def _extract_metadata_fields(text: str) -> list[dict[str, str]]:
+    """
+    @brief 从规范文本中提取封面元信息字段。
+
+    @param text 规范文本。
+    @return 字段列表。
+    """
+    fields = [
+        ("major_name", "专业名称"),
+        ("course_name", "课程名称"),
+        ("advisor_1", "指导教师一"),
+        ("advisor_2", "指导教师二"),
+        ("student_id", "学生学号"),
+        ("student_name", "学生姓名"),
+    ]
+    compact_text = re.sub(r"\s+", "", text)
+    return [
+        {"key": key, "label": label}
+        for key, label in fields
+        if label in text or label.replace(" ", "") in compact_text
+    ]
+
+
 def _closest_line_spacing(value: Any) -> float:
     """
     @brief 将行距规范到允许选项。
@@ -415,6 +716,33 @@ def _closest_line_spacing(value: Any) -> float:
     allowed = [1.0, 1.25, 1.35, 1.5, 2.0]
     number = _coerce_number(value, 1.5)
     return min(allowed, key=lambda item: abs(item - number))
+
+
+def _normalize_line_spacing_rule(value: Any, default_multiple: float = 1.5) -> dict[str, Any]:
+    """
+    @brief 规范行距规则。
+
+    @param value 原始行距规则。
+    @param default_multiple 默认倍数行距。
+    @return 规范后的行距规则。
+    """
+    if isinstance(value, dict):
+        rule_type = str(value.get("type") or "multiple").lower()
+        number = _coerce_number(value.get("value"), default_multiple)
+        unit = str(value.get("unit") or ("pt" if rule_type == "exact" else "line")).lower()
+    else:
+        rule_type = "multiple"
+        number = default_multiple
+        unit = "line"
+    if rule_type not in ("multiple", "exact"):
+        rule_type = "multiple"
+    if unit in ("磅", "point", "points"):
+        unit = "pt"
+    if unit in ("行", "lines"):
+        unit = "line"
+    if rule_type == "exact":
+        unit = "pt"
+    return {"type": rule_type, "value": max(0, number), "unit": unit}
 
 
 def _parse_json_object(value: str | None) -> dict[str, Any] | None:

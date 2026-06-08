@@ -117,6 +117,52 @@ def get_feedback_options_prompt_template() -> str:
 """
 
 
+def get_fill_document_prompt_template() -> str:
+    """
+    @brief 获取正文填充提示词模板。
+
+    @return 提示词模板字符串。
+    """
+    return """你是课程报告正文写作助手。
+请基于已经确认的结构树、文本库资料和模板参数，为结构树填充可直接写入 Word 的正文。
+
+重要原则：
+- 不要改变章节标题、章节层级、图片 block、表格 block。
+- 保留 blocks 中已有的 image/table。
+- 每个章节使用 paragraphs 数组承载正文段落。
+- content 可以保留为章节摘要，但正式正文应放入 paragraphs。
+- 正文要根据文本库资料展开，不要只写提纲。
+- 如果资料不足，可以结合课程报告常识进行合理补充，但不要编造具体数据。
+
+用户主题：
+{topic}
+
+当前结构树：
+{tree_json}
+
+文本库资料：
+{materials}
+
+模板参数：
+- 文本详细程度：{length}/100
+- 专业程度：{professionalism}/100
+- 语言正式程度：{formality}/100
+- 结构清晰程度：{structure}/100
+- 资料引用强度：{evidence}/100
+
+Word 格式模板配置：
+{document_format}
+
+输出要求：
+- 只输出严格 JSON，不要 Markdown，不要解释文字。
+- JSON 必须包含 title 和 sections。
+- sections 中每个章节保留 heading、children、blocks，并新增 paragraphs。
+- 每个一级章节 paragraphs 至少 2 段；每段 120-220 字。
+- 二级章节 paragraphs 至少 1 段；每段 90-180 字。
+- 如果章节下已有图片，请在图片前后的正文中自然引出图片含义。
+"""
+
+
 def build_feedback_options_prompt(topic: str, tree: dict[str, Any], feedback: str) -> str:
     """
     @brief 构造反馈改进选项提示词。
@@ -130,6 +176,35 @@ def build_feedback_options_prompt(topic: str, tree: dict[str, Any], feedback: st
         topic=topic,
         tree_json=json.dumps(tree, ensure_ascii=False, indent=2),
         feedback=feedback or "无",
+    )
+
+
+def build_fill_document_prompt(
+    topic: str,
+    tree: dict[str, Any],
+    materials: list[dict],
+    config: dict[str, Any] | None,
+) -> str:
+    """
+    @brief 构造正文填充提示词。
+
+    @param topic 用户主题。
+    @param tree 当前结构树。
+    @param materials 文本资料列表。
+    @param config 模板参数。
+    @return 最终提示词。
+    """
+    merged_config = merge_with_default_config(config)
+    return get_fill_document_prompt_template().format(
+        topic=topic,
+        tree_json=json.dumps(tree, ensure_ascii=False, indent=2),
+        materials=_format_materials(materials),
+        length=merged_config["length"],
+        professionalism=merged_config["professionalism"],
+        formality=merged_config["formality"],
+        structure=merged_config["structure"],
+        evidence=merged_config["evidence"],
+        document_format=json.dumps(merged_config.get("document_format", {}), ensure_ascii=False, indent=2),
     )
 
 

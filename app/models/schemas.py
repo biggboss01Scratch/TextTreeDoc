@@ -50,6 +50,24 @@ class LibraryOut(BaseModel):
     count: int = 0
 
 
+class ImageUpdate(BaseModel):
+    name: str | None = None
+    caption: str | None = None
+    description: str | None = None
+
+
+class ImageOut(BaseModel):
+    id: int
+    name: str
+    caption: str | None = ""
+    description: str | None = ""
+    file_path: str
+    content_type: str | None = ""
+    created_at: str | None
+    created_by: str | None = "anonymous"
+    preview_url: str
+
+
 class TemplateConfigCreate(BaseModel):
     name: str = Field(..., min_length=1)
     config: dict[str, Any]
@@ -77,6 +95,12 @@ class DocumentTemplateBuildRequest(BaseModel):
     use_llm: bool = False
 
 
+class FormatDocumentAnalyzeRequest(BaseModel):
+    content: str = Field(..., min_length=1)
+    base_config: dict[str, Any] | None = None
+    use_llm: bool = False
+
+
 class TreeRequest(BaseModel):
     topic: str = Field(..., min_length=1)
     use_llm: bool = False
@@ -95,3 +119,11 @@ class DocxRequest(BaseModel):
     title: str
     tree: dict[str, Any]
     format_config: dict[str, Any] | None = None
+
+
+class FillDocumentRequest(BaseModel):
+    topic: str = Field(..., min_length=1)
+    tree: dict[str, Any]
+    use_llm: bool = False
+    library_ids: list[int] | None = None
+    template_config: dict[str, Any] | None = None

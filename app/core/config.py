@@ -14,6 +14,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "data"
 UPLOAD_DIR = PROJECT_ROOT / "uploaded"
+IMAGE_UPLOAD_DIR = UPLOAD_DIR / "images"
 GENERATED_DIR = PROJECT_ROOT / "generated"
 TEMPLATE_DIR = PROJECT_ROOT / "templates"
 FRONTEND_DIST_DIR = PROJECT_ROOT / "frontend" / "dist"
@@ -29,7 +30,7 @@ def ensure_runtime_dirs() -> None:
 
     @return None。
     """
-    for directory in (DATA_DIR, UPLOAD_DIR, GENERATED_DIR, TEMPLATE_DIR):
+    for directory in (DATA_DIR, UPLOAD_DIR, IMAGE_UPLOAD_DIR, GENERATED_DIR, TEMPLATE_DIR):
         directory.mkdir(parents=True, exist_ok=True)
 
 

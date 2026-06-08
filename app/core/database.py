@@ -80,6 +80,20 @@ def init_db() -> None:
         )
         connection.execute(
             """
+            CREATE TABLE IF NOT EXISTS images (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                caption TEXT,
+                description TEXT,
+                file_path TEXT NOT NULL,
+                content_type TEXT,
+                created_at TEXT,
+                created_by TEXT
+            )
+            """
+        )
+        connection.execute(
+            """
             CREATE TABLE IF NOT EXISTS template_configs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,

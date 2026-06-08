@@ -18,10 +18,11 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
 from app.core.config import GENERATED_DIR
-from app.models.schemas import DocxRequest, FeedbackOptionsRequest, TreeRequest
+from app.models.schemas import DocxRequest, FeedbackOptionsRequest, FillDocumentRequest, TreeRequest
 from app.services.docx_service import generate_docx_from_tree
+from app.services.fill_service import fill_document_locally
 from app.services.llm_service import call_llm
-from app.services.prompt_service import build_feedback_options_prompt, build_generation_prompt
+from app.services.prompt_service import build_feedback_options_prompt, build_fill_document_prompt, build_generation_prompt
 from app.services.template_service import get_default_template_config
 from app.services.text_service import search_related_texts
 from app.services.tree_service import generate_tree
@@ -54,6 +55,28 @@ def create_document_tree(request: TreeRequest) -> dict:
     tree = generate_tree(request.topic, related_texts)
     tree["prompt_preview"] = prompt_preview
     return tree
+
+
+@router.post("/fill")
+def fill_document_content(request: FillDocumentRequest) -> dict:
+    """
+    @brief 根据结构树和文本库资料填充正式正文。
+
+    @param request 包含 topic、tree 和模板参数。
+    @return 填充 paragraphs 后的文档树。
+    """
+    related_texts = search_related_texts(request.topic, library_ids=request.library_ids, limit=8)
+    config = request.template_config or get_default_template_config()["config"]
+    prompt_preview = build_fill_document_prompt(request.topic, request.tree, related_texts, config)
+    if request.use_llm:
+        llm_document = _parse_json_object(call_llm(prompt_preview))
+        if llm_document:
+            llm_document.setdefault("title", request.tree.get("title") or request.topic)
+            llm_document["prompt_preview"] = prompt_preview
+            return llm_document
+    filled = fill_document_locally(request.topic, request.tree, related_texts)
+    filled["prompt_preview"] = prompt_preview
+    return filled
 
 
 @router.post("/docx")
