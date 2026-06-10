@@ -319,7 +319,7 @@ def analyze_format_document(
 
     @param content 格式规范文本。
     @param base_config 当前格式配置。
-    @param use_llm 是否预留使用大模型分析。
+    @param use_llm 是否使用 DeepSeek 分析。
     @return 分析结果。
     """
     config = dict(DEFAULT_DOCUMENT_FORMAT)
@@ -327,14 +327,27 @@ def analyze_format_document(
         config.update(base_config)
     extracted_rules: list[str] = []
     warnings: list[str] = []
-    text = content or ""
+    source_text = content or ""
+    text = source_text
+    if use_llm:
+        extracted_requirement = _extract_requirement_with_llm(source_text)
+        if extracted_requirement:
+            text = extracted_requirement
+            extracted_rules.append("DeepSeek：已提取模板格式要求")
+        else:
+            warnings.append("DeepSeek 未返回可用提取结果，已使用上传文档原文解析。")
     _apply_font_size_requirement(config, text)
     _apply_spacing_requirement(config, text)
     _apply_format_document_rules(config, text, extracted_rules)
     structure_requirements = _extract_structure_requirements(text)
     metadata_fields = _extract_metadata_fields(text)
-    if use_llm:
-        warnings.append("当前版本先使用规则解析；AI 深度解析将在后续版本接入。")
+    if use_llm and text != source_text:
+        config = build_document_format_config(
+            str(config.get("template_type") or "课程报告"),
+            text,
+            config,
+            True,
+        )
     if not extracted_rules:
         warnings.append("未识别到明确格式规则，请检查规范文本是否包含字体、字号、行距等说明。")
     return {
@@ -343,7 +356,35 @@ def analyze_format_document(
         "metadata_fields": metadata_fields,
         "extracted_rules": extracted_rules,
         "warnings": warnings,
+        "requirement_text": text.strip(),
     }
+
+
+def _extract_requirement_with_llm(content: str) -> str:
+    """
+    @brief 使用 DeepSeek 从规范文档原文中提炼可用于模板生成的格式要求。
+
+    @param content 规范文档原文。
+    @return 提炼后的格式要求；失败时返回空字符串。
+    """
+    if not content.strip():
+        return ""
+    prompt = f"""
+请从下面的格式规范文档中提取“Word 模板格式要求”，不要写正文内容要求。
+
+输出要求：
+1. 只返回 JSON，不要 Markdown。
+2. JSON 结构为：{{"requirement_text": "一段中文格式要求"}}。
+3. requirement_text 应包含能用于生成 Word 模板的具体要求，例如封面、摘要、目录、标题编号、标题字体字号、正文字体字号、行距、首行缩进、段前段后、表题图题、参考文献等。
+4. 忽略与格式无关的课程说明、评分说明、提交说明、代码说明。
+5. 如果原文没有明确写某项格式，不要编造具体数值。
+
+规范文档原文：
+{content[:8000]}
+"""
+    parsed = _parse_json_object(call_llm(prompt))
+    requirement = parsed.get("requirement_text") if parsed else ""
+    return str(requirement or "").strip()
 
 
 def _build_fallback_document_format(

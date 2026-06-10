@@ -4,6 +4,13 @@ TextTreeDoc 是一个基于文本库的 Word 文档自动生成工作台。系�
 
 项目用于课程报告、实验报告、结课论文、项目设计文档等场景。没有大模型 API Key 时，系统会使用本地规则兜底；配置 DeepSeek 后，可以让 AI 辅助生成格式、结构树和正文内容。
 
+## 项目信息
+
+- 课程：武汉大学开源软件与技术课程 2026
+- 项目：TextTreeDoc
+- 作者：TextTreeDoc Contributors
+- 许可证：MIT License
+
 ## 主要功能
 
 - 文本库管理：支持新建文本库、选择文本库、查看资料列表。
@@ -27,6 +34,7 @@ TextTreeDoc 是一个基于文本库的 Word 文档自动生成工作台。系�
 ```text
 TextTreeDoc/
 ├── main.py                 # FastAPI 入口
+├── LICENSE                 # MIT 开源许可证
 ├── app/
 │   ├── api/                # 后端接口
 │   ├── core/               # 配置与数据库初始化
@@ -249,5 +257,7 @@ Word 目录使用的是目录域。生成后打开 Word，可能需要右键目�
 ## 开源说明
 
 本项目为课程作业项目。项目使用到的第三方依赖和参考资料记录在 `docs/references.md` 中。
+
+本项目采用 MIT License 开源，许可证全文见根目录下的 `LICENSE` 文件。
 
 请不要提交真实 API Key、个人隐私资料或不应公开的课程/学校内部文件。

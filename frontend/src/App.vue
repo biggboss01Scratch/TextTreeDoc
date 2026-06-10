@@ -27,12 +27,16 @@ const templateSettings = ref({
 })
 const templateConfigId = ref(null)
 const templateConfigName = ref('默认模板配置')
-const documentTemplateTypes = ['实验报告', '结课论文', '技术分析报告', '项目设计文档']
+const documentTemplates = ref([
+  { id: 'preset-lab-report', name: '实验报告', presetKey: '实验报告', desc: '过程、结果、表格' },
+  { id: 'preset-thesis', name: '结课论文', presetKey: '结课论文', desc: '摘要、目录、参考文献' },
+  { id: 'preset-analysis', name: '技术分析报告', presetKey: '技术分析报告', desc: '分析、对比、引用' },
+  { id: 'preset-design', name: '项目设计文档', presetKey: '项目设计文档', desc: '模块、接口、设计说明' },
+])
+const selectedDocumentTemplateId = ref('preset-lab-report')
 const selectedDocumentTemplateType = ref('实验报告')
-const documentTemplateRequirement = ref('正文首行缩进两个中文字符，1.5 倍行距，一级标题黑体三号，一级标题段前 18 磅段后 12 磅，正文宋体小四，标题编号使用 1 / 1.1 / 1.1.1。')
 const formatDocumentText = ref('')
 const formatDocumentFile = ref(null)
-const formatAnalysis = ref(null)
 const documentFormatConfig = ref({
   template_type: '实验报告',
   style_name: '实验报告模板',
@@ -202,6 +206,30 @@ const documentFormatSummary = computed(() => {
     `标题：${config.heading_font} ${formatFontSize(config.heading1_size)} / ${formatFontSize(config.heading2_size)} / ${formatFontSize(config.heading3_size)}`,
     `行距：${formatLineSpacing(config)}`,
     `段落：首行缩进 ${config.first_line_indent_chars} 字`,
+  ]
+})
+const documentFormatFeatureRows = computed(() => {
+  const config = documentFormatConfig.value
+  return [
+    { label: '模板', value: config.style_name || config.template_type },
+    { label: '编号', value: config.heading_numbering === 'chinese' ? '一、（一）、1.' : '1 / 1.1 / 1.1.1' },
+    { label: '正文', value: `${config.body_font} ${formatFontSize(config.body_size)}` },
+    {
+      label: '标题',
+      value: `${config.heading_font} ${formatFontSize(config.heading1_size)} / ${formatFontSize(config.heading2_size)} / ${formatFontSize(config.heading3_size)}`,
+    },
+    { label: '行距', value: formatLineSpacing(config) },
+    { label: '首行缩进', value: `${config.first_line_indent_chars} 字` },
+    {
+      label: '组成',
+      value: [config.cover ? '封面' : null, config.toc ? '目录' : null, config.abstract ? '摘要' : null, config.references ? '参考文献' : null]
+        .filter(Boolean)
+        .join(' / ') || '正文主体',
+    },
+    { label: '正文段前后', value: `${formatSpacing(config.body_space_before)} / ${formatSpacing(config.body_space_after)}` },
+    { label: '一级标题段前后', value: `${formatSpacing(config.heading1_space_before)} / ${formatSpacing(config.heading1_space_after)}` },
+    { label: '二级标题段前后', value: `${formatSpacing(config.heading2_space_before)} / ${formatSpacing(config.heading2_space_after)}` },
+    { label: '三级标题段前后', value: `${formatSpacing(config.heading3_space_before)} / ${formatSpacing(config.heading3_space_after)}` },
   ]
 })
 
@@ -505,8 +533,19 @@ async function saveTemplateConfig() {
   }
 }
 
-function applyDocumentTemplatePreset(type) {
-  selectedDocumentTemplateType.value = type
+function applyDocumentTemplatePreset(template) {
+  const item =
+    typeof template === 'string'
+      ? documentTemplates.value.find((current) => current.name === template || current.presetKey === template)
+      : template
+  if (!item) return
+  selectedDocumentTemplateId.value = item.id
+  selectedDocumentTemplateType.value = item.name
+  if (item.config) {
+    documentFormatConfig.value = { ...documentFormatConfig.value, ...item.config }
+    return
+  }
+  const type = item.presetKey || item.name
   const presets = {
     实验报告: {
       template_type: '实验报告',
@@ -593,23 +632,85 @@ function applyDocumentTemplatePreset(type) {
       heading3_space_after: { value: 6, unit: 'pt' },
     },
   }
-  documentFormatConfig.value = { ...documentFormatConfig.value, ...presets[type] }
+  documentFormatConfig.value = {
+    ...documentFormatConfig.value,
+    ...presets[type],
+    template_type: item.name,
+    style_name: `${item.name}模板`,
+  }
+}
+
+function renameDocumentTemplate(template) {
+  const nextName = window.prompt('请输入新的模板名称', template.name)
+  if (!nextName?.trim()) return
+  const name = nextName.trim()
+  documentTemplates.value = documentTemplates.value.map((item) =>
+    item.id === template.id ? { ...item, name, desc: item.desc || summarizeTemplateConfig(item.config) } : item,
+  )
+  if (selectedDocumentTemplateId.value === template.id) {
+    selectedDocumentTemplateType.value = name
+    documentFormatConfig.value = {
+      ...documentFormatConfig.value,
+      template_type: name,
+      style_name: documentFormatConfig.value.style_name?.includes('模板') ? `${name}模板` : name,
+    }
+  }
+}
+
+function deleteDocumentTemplate(template) {
+  if (documentTemplates.value.length <= 1) {
+    setNotice('至少保留一个模板', 'warning')
+    return
+  }
+  if (!window.confirm(`确定删除“${template.name}”模板吗？`)) return
+  documentTemplates.value = documentTemplates.value.filter((item) => item.id !== template.id)
+  if (selectedDocumentTemplateId.value === template.id) {
+    applyDocumentTemplatePreset(documentTemplates.value[0])
+  }
+}
+
+function addGeneratedDocumentTemplate(config) {
+  const name = config.style_name || `${selectedDocumentTemplateType.value}模板`
+  const id = `generated-${Date.now()}`
+  const template = {
+    id,
+    name,
+    desc: summarizeTemplateConfig(config),
+    config: { ...config, template_type: name, style_name: name },
+  }
+  documentTemplates.value = [...documentTemplates.value, template]
+  selectedDocumentTemplateId.value = id
+  selectedDocumentTemplateType.value = name
+}
+
+function summarizeTemplateConfig(config = {}) {
+  const parts = []
+  parts.push(config.toc ? '目录' : '无目录')
+  parts.push(config.abstract ? '摘要' : '无摘要')
+  parts.push(config.references ? '参考文献' : '正文格式')
+  return parts.join('、')
 }
 
 async function buildDocumentTemplate() {
+  if (!formatDocumentText.value.trim()) {
+    setNotice('请先上传规范文档或在文本框输入格式要求', 'warning')
+    return
+  }
   loading.value = true
   buildingDocumentTemplate.value = useLLM.value
   try {
-    documentFormatConfig.value = await apiFetch('/templates/configs/document-format', {
+    const result = await apiFetch('/templates/configs/document-format', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         template_type: selectedDocumentTemplateType.value,
-        requirement: documentTemplateRequirement.value,
+        requirement: formatDocumentText.value,
         base_config: documentFormatConfig.value,
         use_llm: useLLM.value,
       }),
     })
+    documentFormatConfig.value = result
+    addGeneratedDocumentTemplate(result)
     setNotice(useLLM.value ? 'AI 文档模板已生成' : '文档模板配置已生成')
   } catch (error) {
     setNotice(error.message, 'error')
@@ -626,34 +727,10 @@ function importFormatDocument() {
 
 async function handleFormatDocumentFile(event) {
   formatDocumentFile.value = event.target.files?.[0] || null
-  await analyzeFormatFile()
+  await loadFormatDocumentText()
 }
 
-async function analyzeFormatText() {
-  if (!formatDocumentText.value.trim()) {
-    setNotice('请先粘贴格式规范文本', 'warning')
-    return
-  }
-  loading.value = true
-  try {
-    formatAnalysis.value = await apiFetch('/templates/configs/analyze-format-document', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        content: formatDocumentText.value,
-        base_config: documentFormatConfig.value,
-        use_llm: useLLM.value,
-      }),
-    })
-    setNotice('格式规范已分析')
-  } catch (error) {
-    setNotice(error.message, 'error')
-  } finally {
-    loading.value = false
-  }
-}
-
-async function analyzeFormatFile() {
+async function loadFormatDocumentText() {
   if (!formatDocumentFile.value) {
     setNotice('请选择格式规范文件', 'warning')
     return
@@ -661,10 +738,10 @@ async function analyzeFormatFile() {
   const formData = new FormData()
   formData.append('file', formatDocumentFile.value)
   formData.append('base_config_json', JSON.stringify(documentFormatConfig.value))
-  formData.append('use_llm', String(useLLM.value))
+  formData.append('use_llm', 'false')
   loading.value = true
   try {
-    formatAnalysis.value = await fetch(`${API_BASE}/templates/configs/analyze-format-file`, {
+    const result = await fetch(`${API_BASE}/templates/configs/analyze-format-file`, {
       method: 'POST',
       body: formData,
     }).then(async (response) => {
@@ -674,27 +751,16 @@ async function analyzeFormatFile() {
       }
       return response.json()
     })
+    formatDocumentText.value = result.source_text || ''
     formatDocumentFile.value = null
     const input = document.querySelector('#formatDocumentInput')
     if (input) input.value = ''
-    setNotice('格式规范文件已分析')
+    setNotice('已将上传文档内容填入文本框')
   } catch (error) {
     setNotice(error.message, 'error')
   } finally {
     loading.value = false
   }
-}
-
-function applyFormatAnalysis() {
-  if (!formatAnalysis.value?.format_config) {
-    setNotice('请先分析格式规范', 'warning')
-    return
-  }
-  documentFormatConfig.value = {
-    ...documentFormatConfig.value,
-    ...formatAnalysis.value.format_config,
-  }
-  setNotice('已应用格式规范分析结果')
 }
 
 async function addText() {
@@ -1271,41 +1337,43 @@ onMounted(async () => {
         <div class="panel-head">
           <div>
             <p class="section-kicker">Word 格式模板</p>
-            <h2>AI 文档模板构建</h2>
+            <h2>生成模板配置</h2>
           </div>
           <span class="soft-badge">{{ selectedDocumentTemplateType }}</span>
         </div>
 
         <div class="template-type-grid">
-          <button
-            v-for="type in documentTemplateTypes"
-            :key="type"
-            type="button"
+          <article
+            v-for="template in documentTemplates"
+            :key="template.id"
             class="template-type-card"
-            :class="{ active: selectedDocumentTemplateType === type }"
-            @click="applyDocumentTemplatePreset(type)"
+            :class="{ active: selectedDocumentTemplateId === template.id }"
+            tabindex="0"
+            @click="applyDocumentTemplatePreset(template)"
+            @keyup.enter="applyDocumentTemplatePreset(template)"
           >
-            <strong>{{ type }}</strong>
-            <span>{{ type === '结课论文' ? '摘要、目录、参考文献' : type === '实验报告' ? '过程、结果、表格' : type === '技术分析报告' ? '分析、对比、引用' : '模块、接口、设计说明' }}</span>
-          </button>
+            <div class="template-card-main">
+              <strong>{{ template.name }}</strong>
+              <span>{{ template.desc }}</span>
+            </div>
+            <div class="template-card-actions">
+              <button type="button" class="mini-action" title="重命名模板" @click.stop="renameDocumentTemplate(template)">
+                重命名
+              </button>
+              <button type="button" class="mini-action danger" title="删除模板" @click.stop="deleteDocumentTemplate(template)">
+                删除
+              </button>
+            </div>
+          </article>
         </div>
-
-        <label class="format-requirement">
-          向 AI 描述格式要求
-          <textarea
-            v-model="documentTemplateRequirement"
-            rows="6"
-            placeholder="例如：正文首行缩进两个中文字符，1.5 倍行距，一级标题黑体三号，一级标题段前 18 磅段后 12 磅，二级标题段前 0.5 行段后 6 磅，正文宋体小四。"
-          ></textarea>
-        </label>
 
         <section class="format-document-box">
           <div class="panel-head compact-head">
             <div>
-              <p class="section-kicker">格式规范文档</p>
-              <h3>上传或粘贴规范，自动抽取格式</h3>
+              <p class="section-kicker">格式规范来源</p>
+              <h3>上传文档解析文字，或直接输入规范</h3>
             </div>
-            <button type="button" class="ghost" :disabled="loading" @click="importFormatDocument">上传规范</button>
+            <button type="button" class="ghost" :disabled="loading" @click="importFormatDocument">上传文档</button>
           </div>
           <input
             id="formatDocumentInput"
@@ -1316,15 +1384,9 @@ onMounted(async () => {
           />
           <textarea
             v-model="formatDocumentText"
-            rows="4"
-            placeholder="也可以直接粘贴格式规范文本，例如封面、摘要、目录、标题字号、正文行距、表题图题等要求。"
+            rows="9"
+            placeholder="在这里输入或粘贴格式规范，例如封面、摘要、目录、标题字号、正文行距、表题图题等要求。上传规范文档后，解析出的文字也会显示在这里。"
           ></textarea>
-          <div class="format-doc-actions">
-            <button type="button" class="ghost" :disabled="loading" @click="analyzeFormatText">分析粘贴文本</button>
-            <button type="button" class="primary" :disabled="loading || !formatAnalysis" @click="applyFormatAnalysis">
-              应用分析结果
-            </button>
-          </div>
         </section>
 
         <div class="format-actions">
@@ -1334,7 +1396,7 @@ onMounted(async () => {
             <span class="switch-text">使用 DeepSeek 生成格式</span>
           </label>
           <button type="button" class="primary" :disabled="loading" @click="buildDocumentTemplate">
-            生成文档模板配置
+            生成模板配置
           </button>
         </div>
       </section>
@@ -1347,32 +1409,17 @@ onMounted(async () => {
           </div>
           <button type="button" class="ghost" @click="showFormatJsonModal = true">查看 JSON</button>
         </div>
+        <div class="format-feature-list">
+          <article v-for="item in documentFormatFeatureRows" :key="item.label" class="format-feature-item">
+            <span class="format-feature-label">{{ item.label }}</span>
+            <strong class="format-feature-value">{{ item.value }}</strong>
+          </article>
+        </div>
         <div class="format-chip-grid">
-          <span v-for="item in documentFormatSummary" :key="item" class="format-chip">{{ item }}</span>
-          <span class="format-chip">封面：{{ documentFormatConfig.cover ? '需要' : '不需要' }}</span>
-          <span v-if="documentFormatConfig.cover" class="format-chip">
-            封面样式：{{ documentFormatConfig.cover_style === 'wuhan_cs_course_design' ? '武汉计院课程设计' : '简易/未指定' }}
-          </span>
-          <span class="format-chip">目录：{{ documentFormatConfig.toc ? '需要' : '不需要' }}</span>
-          <span class="format-chip">摘要：{{ documentFormatConfig.abstract ? '需要' : '不需要' }}</span>
-          <span class="format-chip">参考文献：{{ documentFormatConfig.references ? '需要' : '不需要' }}</span>
           <span v-for="item in formatSpacingText" :key="item" class="format-chip wide-chip">{{ item }}</span>
           <span v-if="documentFormatConfig.line_spacing_rule?.type === 'exact'" class="format-chip wide-chip">
             固定行距：{{ documentFormatConfig.line_spacing_rule.value }} 磅
           </span>
-        </div>
-        <div v-if="formatAnalysis" class="format-analysis-card">
-          <h3>规范分析结果</h3>
-          <div class="format-chip-grid">
-            <span v-for="rule in formatAnalysis.extracted_rules" :key="rule" class="format-chip">{{ rule }}</span>
-            <span v-for="item in formatAnalysis.structure_requirements" :key="item.key" class="format-chip">
-              结构：{{ item.label }}
-            </span>
-            <span v-for="field in formatAnalysis.metadata_fields" :key="field.key" class="format-chip">
-              字段：{{ field.label }}
-            </span>
-          </div>
-          <p v-for="warning in formatAnalysis.warnings" :key="warning" class="analysis-warning">{{ warning }}</p>
         </div>
         <div class="format-visual-card">
           <span class="paper-line title-line"></span>

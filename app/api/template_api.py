@@ -4,6 +4,7 @@
 """
 
 import json
+import tempfile
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
@@ -134,13 +135,13 @@ async def analyze_format_file(
 
     @param file 支持 txt、md、docx、pdf。
     @param base_config_json 当前格式配置 JSON。
-    @param use_llm 是否预留使用 AI。
+    @param use_llm 是否使用 DeepSeek 分析。
     @return 格式分析结果。
     """
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in {".txt", ".md", ".docx", ".pdf"}:
         raise HTTPException(status_code=400, detail="仅支持 .txt、.md、.docx、.pdf 格式规范文件")
-    temp_path = Path("/tmp") / f"format_rule_{Path(file.filename or f'upload{suffix}').name}"
+    temp_path = Path(tempfile.gettempdir()) / f"format_rule_{Path(file.filename or f'upload{suffix}').name}"
     temp_path.write_bytes(await file.read())
     try:
         content = parse_uploaded_file(temp_path)
@@ -152,4 +153,6 @@ async def analyze_format_file(
             base_config = json.loads(base_config_json)
         except json.JSONDecodeError as exc:
             raise HTTPException(status_code=400, detail="base_config_json 不是有效 JSON") from exc
-    return template_service.analyze_format_document(content, base_config, use_llm)
+    analysis = template_service.analyze_format_document(content, base_config, use_llm)
+    analysis["source_text"] = content
+    return analysis
