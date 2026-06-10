@@ -49,6 +49,8 @@ Word 格式模板配置：
 - blocks 支持 table 类型，table 必须包含 headers 和 rows。
 - 如果 Word 格式模板要求摘要、目录或参考文献，可以在结构树中体现相应章节。
 - 标题编号风格要尽量匹配 Word 格式模板配置。
+- 结构树内容应像正式报告目录和章节摘要，不要暴露生成过程。
+- 不要在 heading 或 content 中出现“文本库”“检索到资料”“结构树”“前端”“后端”“自动生成文档”等元叙述。
 """
 
 
@@ -131,7 +133,9 @@ def get_fill_document_prompt_template() -> str:
 - 保留 blocks 中已有的 image/table。
 - 每个章节使用 paragraphs 数组承载正文段落。
 - content 可以保留为章节摘要，但正式正文应放入 paragraphs。
-- 正文要根据文本库资料展开，不要只写提纲。
+- 正文要吸收给定资料中的事实和内容，但写成自然的课程报告正文。
+- 不要在正文中说明“本文由文本库生成”“系统检索资料”“根据结构树生成”等生产过程。
+- 不要出现“文本库”“结构树”“前端展示”“后端生成 Word”等与报告主题无关的元叙述。
 - 如果资料不足，可以结合课程报告常识进行合理补充，但不要编造具体数据。
 
 用户主题：
@@ -227,7 +231,7 @@ def _format_materials(materials: list[dict]) -> str:
                     f"标题：{item.get('title', '')}",
                     f"摘要：{item.get('summary', '')}",
                     f"关键词：{item.get('keywords', '')}",
-                    f"正文摘录：{content[:700]}",
+                    f"正文摘录：{content[:450]}",
                 ]
             )
         )

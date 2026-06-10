@@ -21,7 +21,7 @@ from app.core.config import GENERATED_DIR
 from app.models.schemas import DocxRequest, FeedbackOptionsRequest, FillDocumentRequest, TreeRequest
 from app.services.docx_service import generate_docx_from_tree
 from app.services.fill_service import fill_document_locally
-from app.services.llm_service import call_llm
+from app.services.llm_service import call_llm_with_status
 from app.services.prompt_service import build_feedback_options_prompt, build_fill_document_prompt, build_generation_prompt
 from app.services.template_service import get_default_template_config
 from app.services.text_service import search_related_texts
@@ -47,13 +47,35 @@ def create_document_tree(request: TreeRequest) -> dict:
         request.prompt_delta,
     )
     if request.use_llm:
-        llm_tree = _parse_json_object(call_llm(prompt_preview))
+        llm_text, generation_meta = call_llm_with_status(prompt_preview)
+        llm_tree = _parse_json_object(llm_text)
         if llm_tree:
             llm_tree.setdefault("title", request.topic)
             llm_tree["prompt_preview"] = prompt_preview
+            llm_tree["generation_meta"] = {
+                **generation_meta,
+                "stage": "tree",
+            }
             return llm_tree
+        generation_meta = {
+            **generation_meta,
+            "provider": "local",
+            "used_llm": False,
+            "fallback": True,
+            "fallback_reason": generation_meta.get("fallback_reason") or "DeepSeek 返回内容不是合法结构树 JSON",
+            "stage": "tree",
+        }
+    else:
+        generation_meta = {
+            "provider": "local",
+            "used_llm": False,
+            "fallback": False,
+            "fallback_reason": "",
+            "stage": "tree",
+        }
     tree = generate_tree(request.topic, related_texts)
     tree["prompt_preview"] = prompt_preview
+    tree["generation_meta"] = generation_meta
     return tree
 
 
@@ -69,13 +91,35 @@ def fill_document_content(request: FillDocumentRequest) -> dict:
     config = request.template_config or get_default_template_config()["config"]
     prompt_preview = build_fill_document_prompt(request.topic, request.tree, related_texts, config)
     if request.use_llm:
-        llm_document = _parse_json_object(call_llm(prompt_preview))
+        llm_text, generation_meta = call_llm_with_status(prompt_preview)
+        llm_document = _parse_json_object(llm_text)
         if llm_document:
             llm_document.setdefault("title", request.tree.get("title") or request.topic)
             llm_document["prompt_preview"] = prompt_preview
+            llm_document["generation_meta"] = {
+                **generation_meta,
+                "stage": "fill",
+            }
             return llm_document
+        generation_meta = {
+            **generation_meta,
+            "provider": "local",
+            "used_llm": False,
+            "fallback": True,
+            "fallback_reason": generation_meta.get("fallback_reason") or "DeepSeek 返回内容不是合法正文 JSON",
+            "stage": "fill",
+        }
+    else:
+        generation_meta = {
+            "provider": "local",
+            "used_llm": False,
+            "fallback": False,
+            "fallback_reason": "",
+            "stage": "fill",
+        }
     filled = fill_document_locally(request.topic, request.tree, related_texts)
     filled["prompt_preview"] = prompt_preview
+    filled["generation_meta"] = generation_meta
     return filled
 
 
@@ -99,9 +143,14 @@ def create_feedback_options(request: FeedbackOptionsRequest) -> dict:
     @return 改进选项及 prompt 预览。
     """
     prompt_preview = build_feedback_options_prompt(request.topic, request.tree, request.feedback)
-    llm_result = _parse_json_object(call_llm(prompt_preview))
+    llm_text, generation_meta = call_llm_with_status(prompt_preview)
+    llm_result = _parse_json_object(llm_text)
     if llm_result and isinstance(llm_result.get("options"), list):
         llm_result["prompt_preview"] = prompt_preview
+        llm_result["generation_meta"] = {
+            **generation_meta,
+            "stage": "feedback-options",
+        }
         return llm_result
     return {
         "question": "你希望如何改进当前文档？",
@@ -123,6 +172,14 @@ def create_feedback_options(request: FeedbackOptionsRequest) -> dict:
             },
         ],
         "prompt_preview": prompt_preview,
+        "generation_meta": {
+            **generation_meta,
+            "provider": "local",
+            "used_llm": False,
+            "fallback": True,
+            "fallback_reason": generation_meta.get("fallback_reason") or "DeepSeek 返回内容不是合法反馈选项 JSON",
+            "stage": "feedback-options",
+        },
     }
 
 

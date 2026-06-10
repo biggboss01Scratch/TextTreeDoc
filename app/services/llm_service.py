@@ -12,6 +12,7 @@
 import re
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 from collections import Counter
@@ -126,6 +127,41 @@ def call_llm(prompt: str) -> str | None:
     return result or None
 
 
+def call_llm_with_status(prompt: str) -> tuple[str | None, dict[str, Any]]:
+    """
+    @brief 调用大模型并返回调用状态。
+
+    @param prompt 用户提示词。
+    @return 模型文本和状态信息。
+    """
+    if not llm_available():
+        return None, {
+            "provider": "local",
+            "used_llm": False,
+            "fallback": True,
+            "fallback_reason": "未配置 DeepSeek API Key",
+        }
+    result, error = _chat_completion_with_error(
+        prompt,
+        system="你是一个严谨的中文文档生成助手，必须遵循用户输出格式要求。",
+    )
+    if result:
+        return result, {
+            "provider": "deepseek",
+            "model": _model(),
+            "used_llm": True,
+            "fallback": False,
+            "fallback_reason": "",
+        }
+    return None, {
+        "provider": "local",
+        "model": _model(),
+        "used_llm": False,
+        "fallback": True,
+        "fallback_reason": error or "DeepSeek 未返回有效内容",
+    }
+
+
 def _api_key() -> str:
     """
     @brief 读取大模型 API Key。
@@ -153,6 +189,35 @@ def _model() -> str:
     return os.getenv("LLM_MODEL") or "deepseek-chat"
 
 
+def _request_timeout() -> int:
+    """
+    @brief 读取大模型请求超时时间。
+
+    @return 超时时间，单位秒。
+    """
+    return _read_positive_int_env("LLM_TIMEOUT_SECONDS", 90)
+
+
+def _retry_count() -> int:
+    """
+    @brief 读取大模型网络失败重试次数。
+
+    @return 重试次数。
+    """
+    return _read_positive_int_env("LLM_RETRY_COUNT", 1)
+
+
+def _read_positive_int_env(name: str, default: int) -> int:
+    value = os.getenv(name)
+    if not value:
+        return default
+    try:
+        parsed = int(value)
+    except ValueError:
+        return default
+    return parsed if parsed >= 0 else default
+
+
 def _chat_completion(prompt: str, system: str) -> str:
     """
     @brief 调用 OpenAI-compatible Chat Completions 接口。
@@ -160,6 +225,18 @@ def _chat_completion(prompt: str, system: str) -> str:
     @param prompt 用户提示词。
     @param system 系统提示词。
     @return 模型返回文本；失败时返回空字符串。
+    """
+    result, _error = _chat_completion_with_error(prompt, system)
+    return result
+
+
+def _chat_completion_with_error(prompt: str, system: str) -> tuple[str, str]:
+    """
+    @brief 调用 OpenAI-compatible Chat Completions 接口并保留错误原因。
+
+    @param prompt 用户提示词。
+    @param system 系统提示词。
+    @return 模型返回文本和错误原因。成功时错误原因为空。
     """
     payload = {
         "model": _model(),
@@ -170,25 +247,43 @@ def _chat_completion(prompt: str, system: str) -> str:
         "stream": False,
         "temperature": 0.3,
     }
-    request = urllib.request.Request(
-        f"{_api_base_url()}/chat/completions",
-        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {_api_key()}",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            data = json.loads(response.read().decode("utf-8"))
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
-        return ""
+    data_bytes = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    last_error = ""
+    for attempt in range(_retry_count() + 1):
+        request = urllib.request.Request(
+            f"{_api_base_url()}/chat/completions",
+            data=data_bytes,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {_api_key()}",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=_request_timeout()) as response:
+                data = json.loads(response.read().decode("utf-8"))
+            break
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="ignore")[:200]
+            return "", f"DeepSeek HTTP {exc.code}: {detail or exc.reason}"
+        except urllib.error.URLError as exc:
+            last_error = f"DeepSeek 网络请求失败: {exc.reason}"
+        except TimeoutError:
+            last_error = f"DeepSeek 请求超时（超过 {_request_timeout()} 秒）"
+        except json.JSONDecodeError:
+            return "", "DeepSeek 响应不是有效 JSON"
+        if attempt < _retry_count():
+            time.sleep(1.2)
+    else:
+        return "", last_error or "DeepSeek 请求失败"
     choices = data.get("choices") or []
     if not choices:
-        return ""
+        return "", "DeepSeek 响应缺少 choices"
     message = choices[0].get("message") or {}
-    return str(message.get("content") or "").strip()
+    content = str(message.get("content") or "").strip()
+    if not content:
+        return "", "DeepSeek 返回内容为空"
+    return content, ""
 
 
 def _parse_json_object(value: str) -> dict[str, Any] | None:

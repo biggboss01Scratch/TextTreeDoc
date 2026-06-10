@@ -134,6 +134,7 @@ const formatReady = computed(() => Boolean(documentFormatConfig.value?.style_nam
 const contentReady = computed(() => Boolean(topic.value.trim()))
 const treeReady = computed(() => Boolean(currentTree.value))
 const imageReady = computed(() => treeReady.value)
+const generationMeta = computed(() => currentTree.value?.generation_meta || null)
 const filledParagraphCount = computed(() => countFilledParagraphs(currentTree.value?.sections || []))
 const insertedImageCount = computed(() => countInsertedImages(currentTree.value?.sections || []))
 const documentReady = computed(() => Boolean(downloadUrl.value))
@@ -252,6 +253,18 @@ function countInsertedImages(sections) {
     const own = (section.blocks || []).filter((block) => block.type === 'image').length
     return total + own + countInsertedImages(section.children || [])
   }, 0)
+}
+
+function generationNotice(meta, successText, localText) {
+  if (!meta) return { message: successText, type: 'success' }
+  if (meta.fallback) {
+    const reason = meta.fallback_reason ? `：${meta.fallback_reason}` : ''
+    return { message: `DeepSeek 调用失败，已使用本地规则${reason}`, type: 'warning' }
+  }
+  if (meta.used_llm) {
+    return { message: successText, type: 'success' }
+  }
+  return { message: localText, type: 'success' }
 }
 
 function setNotice(message, type = 'success') {
@@ -936,7 +949,8 @@ async function generateTree() {
     })
     selectedSectionPath.value = sectionOptions.value[0]?.path || ''
     downloadUrl.value = ''
-    setNotice('结构树已生成')
+    const notice = generationNotice(currentTree.value?.generation_meta, 'DeepSeek 已成功生成结构树', '结构树已由本地规则生成')
+    setNotice(notice.message, notice.type)
   } catch (error) {
     setNotice(error.message, 'error')
   } finally {
@@ -973,7 +987,8 @@ async function fillDocumentContent() {
         },
       }),
     })
-    setNotice(useLLM.value ? 'AI 正文已填充' : '正文已填充')
+    const notice = generationNotice(currentTree.value?.generation_meta, 'DeepSeek 已成功填充正文', '正文已由本地规则填充')
+    setNotice(notice.message, notice.type)
   } catch (error) {
     setNotice(error.message, 'error')
   } finally {
@@ -1006,7 +1021,8 @@ async function generateImprovementOptions() {
     improvementOptions.value = result.options || []
     selectedImprovement.value = null
     showImprovementOptions.value = true
-    setNotice('反馈改进选项已生成')
+    const notice = generationNotice(result.generation_meta, 'DeepSeek 已生成反馈改进选项', '反馈改进选项已由本地规则生成')
+    setNotice(notice.message, notice.type)
   } catch (error) {
     setNotice(error.message, 'error')
   } finally {
@@ -1375,7 +1391,9 @@ onMounted(async () => {
             <p class="section-kicker">目录骨架</p>
             <h2>生成结构树</h2>
           </div>
-          <span class="soft-badge">{{ selectedLibraries.length }} 个文本库已选</span>
+          <span class="soft-badge">
+            {{ generationMeta?.stage === 'tree' ? (generationMeta.fallback ? '本地回退' : 'DeepSeek 成功') : `${selectedLibraries.length} 个文本库已选` }}
+          </span>
         </div>
 
         <div class="structure-action-row">
@@ -1599,7 +1617,9 @@ onMounted(async () => {
             <p class="section-kicker">正文与 Word</p>
             <h2>填充内容并导出</h2>
           </div>
-          <span class="soft-badge">{{ filledParagraphCount ? `已填充 ${filledParagraphCount} 段` : '等待填充' }}</span>
+          <span class="soft-badge">
+            {{ generationMeta?.stage === 'fill' ? (generationMeta.fallback ? '本地回退' : 'DeepSeek 成功') : filledParagraphCount ? `已填充 ${filledParagraphCount} 段` : '等待填充' }}
+          </span>
         </div>
 
         <div class="fill-status-grid">

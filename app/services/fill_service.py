@@ -50,18 +50,18 @@ def _build_paragraphs(
         image_note = "本节已经配置了插图，正文需要围绕图示内容进行说明，使图片与章节论述形成对应关系。"
     if level == 1:
         return [
-            f"{base} 在整体报告中，该部分承担承上启下的作用，需要结合文本库资料明确问题背景、设计依据和分析范围。",
-            f"结合已有资料可见，{material_text} 因此，本节不仅整理相关事实，也进一步说明其对“{topic}”的支撑价值。{image_note}".strip(),
+            f"{base} 在整体报告中，该部分承担承上启下的作用，需要明确问题背景、设计依据和分析范围。",
+            f"从课题内容来看，{material_text} 因此，本节不仅整理相关事实，也进一步说明其对“{topic}”的支撑价值。{image_note}".strip(),
         ]
     return [
-        f"{base} 该小节重点对相关内容进行细化说明，并结合资料来源提炼出可用于报告正文的核心观点。{image_note}".strip()
+        f"{base} 该小节重点对相关内容进行细化说明，并提炼出支撑本报告论述的核心观点。{image_note}".strip()
     ]
 
 
 def _material_summary(related_texts: list[dict]) -> str:
     if not related_texts:
-        return "当前文本库资料较少，正文以课程报告常规逻辑进行补充"
+        return "当前可参考信息较少，正文以课程报告常规逻辑进行补充"
     snippets = []
     for item in related_texts[:4]:
         snippets.append(item.get("summary") or item.get("content", "")[:120] or item.get("title", ""))
-    return "；".join(snippet for snippet in snippets if snippet) or "文本库资料提供了主题相关依据"
+    return "；".join(snippet for snippet in snippets if snippet) or "已有内容能够为主题分析提供依据"
