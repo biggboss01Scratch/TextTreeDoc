@@ -32,6 +32,7 @@ DEFAULT_DOCUMENT_FORMAT: dict[str, Any] = {
     "heading_numbering": "decimal",
     "cover": False,
     "cover_style": "none",
+    "show_title": True,
     "toc": False,
     "abstract": False,
     "references": False,
@@ -89,6 +90,7 @@ DOCUMENT_TEMPLATE_PRESETS: dict[str, dict[str, Any]] = {
         "heading_numbering": "decimal",
         "cover": False,
         "cover_style": "none",
+        "show_title": True,
         "toc": False,
         "abstract": False,
         "references": False,
@@ -102,6 +104,7 @@ DOCUMENT_TEMPLATE_PRESETS: dict[str, dict[str, Any]] = {
         "heading_numbering": "chinese",
         "cover": False,
         "cover_style": "none",
+        "show_title": True,
         "toc": True,
         "abstract": True,
         "references": True,
@@ -115,6 +118,7 @@ DOCUMENT_TEMPLATE_PRESETS: dict[str, dict[str, Any]] = {
         "heading_numbering": "decimal",
         "cover": False,
         "cover_style": "none",
+        "show_title": True,
         "toc": True,
         "abstract": False,
         "references": True,
@@ -128,6 +132,7 @@ DOCUMENT_TEMPLATE_PRESETS: dict[str, dict[str, Any]] = {
         "heading_numbering": "decimal",
         "cover": False,
         "cover_style": "none",
+        "show_title": True,
         "toc": True,
         "abstract": False,
         "references": False,
@@ -453,6 +458,7 @@ def _build_document_format_prompt(template_type: str, requirement: str, fallback
   "heading_numbering": "decimal 或 chinese",
   "cover": true,
   "cover_style": "none 或 wuhan_cs_course_design",
+  "show_title": true,
   "toc": true,
   "abstract": false,
   "references": false,
@@ -506,7 +512,7 @@ def _normalize_document_format(config: dict[str, Any]) -> dict[str, Any]:
     normalized["heading_numbering"] = (
         "chinese" if normalized.get("heading_numbering") == "chinese" else "decimal"
     )
-    for key in ("cover", "toc", "abstract", "references"):
+    for key in ("cover", "show_title", "toc", "abstract", "references"):
         normalized[key] = bool(normalized.get(key))
     for key, default in (
         ("body_size", 12),

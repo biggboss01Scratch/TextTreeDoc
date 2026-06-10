@@ -13,6 +13,7 @@ const tabs = [
   { key: 'images', label: '图片', hint: '插图位置' },
   { key: 'fill', label: '填充导出', hint: '正文与 Word' },
 ]
+const workflowKeys = ['library', 'documentTemplate', 'structure', 'images', 'fill']
 
 const libraries = ref([])
 
@@ -43,6 +44,7 @@ const documentFormatConfig = ref({
   heading_numbering: 'decimal',
   cover: false,
   cover_style: 'none',
+  show_title: true,
   toc: false,
   abstract: false,
   references: false,
@@ -186,6 +188,32 @@ const flowSteps = computed(() => [
   },
 ])
 const nextStep = computed(() => flowSteps.value.find((step) => !step.ready) || flowSteps.value[4])
+const currentWorkflowIndex = computed(() => workflowKeys.indexOf(activeTab.value))
+const currentWorkflowStep = computed(() => flowSteps.value[currentWorkflowIndex.value] || null)
+const previousWorkflowStep = computed(() => {
+  if (activeTab.value === 'home') return null
+  const index = currentWorkflowIndex.value
+  if (index <= 0) return { key: 'home', title: '首页' }
+  return flowSteps.value[index - 1]
+})
+const primaryWorkflowAction = computed(() => {
+  if (activeTab.value === 'home') return { label: `继续：${nextStep.value.title}`, disabled: loading.value }
+  if (activeTab.value === 'library') return { label: '下一步：格式', disabled: loading.value }
+  if (activeTab.value === 'documentTemplate') return { label: '下一步：结构树', disabled: loading.value }
+  if (activeTab.value === 'structure') {
+    return currentTree.value
+      ? { label: '下一步：图片', disabled: loading.value }
+      : { label: '生成结构树', disabled: loading.value }
+  }
+  if (activeTab.value === 'images') return { label: '下一步：填充导出', disabled: loading.value || !currentTree.value }
+  if (activeTab.value === 'fill') {
+    if (!currentTree.value) return { label: '返回生成结构树', disabled: loading.value }
+    if (!filledParagraphCount.value) return { label: '填充正文', disabled: loading.value }
+    if (!downloadUrl.value) return { label: '生成 Word', disabled: loading.value }
+    return { label: '下载 Word', disabled: false }
+  }
+  return { label: '下一步', disabled: loading.value }
+})
 
 const documentFormatJson = computed(() => JSON.stringify(documentFormatConfig.value, null, 2))
 const formatSpacingText = computed(() => {
@@ -222,7 +250,7 @@ const documentFormatFeatureRows = computed(() => {
     { label: '首行缩进', value: `${config.first_line_indent_chars} 字` },
     {
       label: '组成',
-      value: [config.cover ? '封面' : null, config.toc ? '目录' : null, config.abstract ? '摘要' : null, config.references ? '参考文献' : null]
+      value: [config.cover ? '封面' : config.show_title ? '正文标题' : null, config.toc ? '目录' : null, config.abstract ? '摘要' : null, config.references ? '参考文献' : null]
         .filter(Boolean)
         .join(' / ') || '正文主体',
     },
@@ -305,6 +333,56 @@ function setNotice(message, type = 'success') {
 
 function switchTab(tabKey) {
   activeTab.value = tabKey
+}
+
+function goPreviousStep() {
+  if (!previousWorkflowStep.value) return
+  activeTab.value = previousWorkflowStep.value.key
+}
+
+async function handlePrimaryWorkflowAction() {
+  if (activeTab.value === 'home') {
+    activeTab.value = nextStep.value.key
+    return
+  }
+  if (activeTab.value === 'library') {
+    activeTab.value = 'documentTemplate'
+    return
+  }
+  if (activeTab.value === 'documentTemplate') {
+    activeTab.value = 'structure'
+    return
+  }
+  if (activeTab.value === 'structure') {
+    if (!currentTree.value) {
+      await generateTree()
+      return
+    }
+    activeTab.value = 'images'
+    return
+  }
+  if (activeTab.value === 'images') {
+    activeTab.value = 'fill'
+    return
+  }
+  if (activeTab.value === 'fill') {
+    if (!currentTree.value) {
+      activeTab.value = 'structure'
+      setNotice('请先生成结构树', 'warning')
+      return
+    }
+    if (!filledParagraphCount.value) {
+      await fillDocumentContent()
+      return
+    }
+    if (!downloadUrl.value) {
+      await generateDocx()
+      return
+    }
+    if (downloadUrl.value) {
+      window.location.href = downloadUrl.value
+    }
+  }
 }
 
 async function runOneClickGenerate() {
@@ -553,6 +631,7 @@ function applyDocumentTemplatePreset(template) {
       heading_numbering: 'decimal',
       cover: false,
       cover_style: 'none',
+      show_title: true,
       toc: false,
       abstract: false,
       references: false,
@@ -574,6 +653,7 @@ function applyDocumentTemplatePreset(template) {
       heading_numbering: 'chinese',
       cover: false,
       cover_style: 'none',
+      show_title: true,
       toc: true,
       abstract: true,
       references: true,
@@ -595,6 +675,7 @@ function applyDocumentTemplatePreset(template) {
       heading_numbering: 'decimal',
       cover: false,
       cover_style: 'none',
+      show_title: true,
       toc: true,
       abstract: false,
       references: true,
@@ -616,6 +697,7 @@ function applyDocumentTemplatePreset(template) {
       heading_numbering: 'decimal',
       cover: false,
       cover_style: 'none',
+      show_title: true,
       toc: true,
       abstract: false,
       references: false,
@@ -1407,7 +1489,7 @@ onMounted(async () => {
             <p class="section-kicker">格式结果</p>
             <h2>{{ documentFormatConfig.style_name }}</h2>
           </div>
-          <button type="button" class="ghost" @click="showFormatJsonModal = true">查看 JSON</button>
+          <button type="button" class="subtle-link" @click="showFormatJsonModal = true">原始配置</button>
         </div>
         <div class="format-feature-list">
           <article v-for="item in documentFormatFeatureRows" :key="item.label" class="format-feature-item">
@@ -1457,8 +1539,7 @@ onMounted(async () => {
           <span class="result-hint">
             {{ currentTree ? `已生成 ${sectionOptions.length} 个章节，下一步可以编排图片` : '结构树生成后会保留在当前流程中' }}
           </span>
-          <button type="button" class="ghost" :disabled="!currentTree" @click="switchTab('images')">下一步：图片</button>
-          <button type="button" class="ghost" :disabled="!currentTree" @click="showTreeJsonModal = true">查看 JSON</button>
+          <button type="button" class="subtle-link" :disabled="!currentTree" @click="showTreeJsonModal = true">原始结构</button>
         </div>
 
         <div class="feedback-box">
@@ -1619,7 +1700,6 @@ onMounted(async () => {
           <button type="button" class="primary" :disabled="loading || !currentTree || !selectedImage" @click="insertSelectedImage">
             插入到章节
           </button>
-          <button type="button" class="ghost" :disabled="!currentTree" @click="switchTab('fill')">下一步：填充</button>
         </div>
 
         <div v-if="visualOutlineItems.length" class="visual-tree image-tree">
@@ -1682,16 +1762,13 @@ onMounted(async () => {
             <span class="switch-box"></span>
             <span class="switch-text">使用 DeepSeek</span>
           </label>
-          <button type="button" class="primary" :disabled="loading || !currentTree" @click="fillDocumentContent">填充正文</button>
-          <button type="button" :disabled="loading || !currentTree" @click="generateDocx">生成 Word</button>
           <a v-if="downloadUrl" class="download" :href="downloadUrl">下载 Word</a>
-          <button v-else type="button" class="ghost" disabled>等待导出</button>
+          <span v-else class="result-hint">底部按钮会按顺序完成正文填充和 Word 生成。</span>
         </div>
 
         <div class="result-toolbar">
-          <button type="button" class="ghost" :disabled="!currentTree" @click="switchTab('structure')">返回结构树</button>
-          <button type="button" class="ghost" :disabled="!currentTree" @click="switchTab('images')">调整图片</button>
-          <button type="button" class="ghost" :disabled="!currentTree" @click="showTreeJsonModal = true">查看 JSON</button>
+          <span class="result-hint">确认正文、图片和格式无误后生成 Word。</span>
+          <button type="button" class="subtle-link" :disabled="!currentTree" @click="showTreeJsonModal = true">原始结构</button>
         </div>
       </section>
 
@@ -1737,6 +1814,24 @@ onMounted(async () => {
         </div>
       </section>
     </section>
+
+      <nav v-if="activeTab !== 'home'" class="workflow-footer" aria-label="流程操作">
+        <button type="button" class="workflow-nav-button" :disabled="!previousWorkflowStep || loading" @click="goPreviousStep">
+          上一步{{ previousWorkflowStep ? `：${previousWorkflowStep.title}` : '' }}
+        </button>
+        <div class="workflow-footer-status">
+          <span v-if="currentWorkflowStep">第 {{ currentWorkflowStep.number }} 步</span>
+          <strong>{{ currentWorkflowStep?.title || '流程' }}</strong>
+        </div>
+        <button
+          type="button"
+          class="primary workflow-nav-button"
+          :disabled="primaryWorkflowAction.disabled"
+          @click="handlePrimaryWorkflowAction"
+        >
+          {{ primaryWorkflowAction.label }}
+        </button>
+      </nav>
 
     <Teleport to="body">
       <div v-if="showFormatJsonModal" class="modal-backdrop" @click.self="showFormatJsonModal = false">

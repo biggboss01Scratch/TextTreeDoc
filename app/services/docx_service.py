@@ -35,6 +35,7 @@ DEFAULT_FORMAT_CONFIG: dict[str, Any] = {
     "heading_numbering": "decimal",
     "cover": False,
     "cover_style": "none",
+    "show_title": True,
     "body_font": BODY_FONT,
     "heading_font": HEADING_FONT,
     "ascii_font": ASCII_FONT,
@@ -246,14 +247,40 @@ def _append_front_matter(document: Document, title: str, front_matter: dict[str,
     @param config 格式配置。
     @return None。
     """
-    if _should_render_cover(front_matter, config):
+    has_cover = _should_render_cover(front_matter, config)
+    if has_cover:
         _append_cover_page(document, title, front_matter.get("cover"), config)
+    elif config.get("show_title", True):
+        _append_document_title(document, title, config)
     if front_matter.get("declaration"):
         _append_declaration_page(document, front_matter["declaration"], config)
     if front_matter.get("abstract") or config.get("abstract"):
         _append_abstract_page(document, front_matter.get("abstract"), config)
     if front_matter.get("toc") or config.get("toc"):
         _append_toc_placeholder(document, config)
+
+
+def _append_document_title(document: Document, title: str, config: dict[str, Any]) -> None:
+    """
+    @brief 在无封面文档开头追加正文标题。
+
+    @param document Word 文档对象。
+    @param title 文档标题。
+    @param config 格式配置。
+    @return None。
+    """
+    title_paragraph = document.add_paragraph(str(title or "未命名文档"))
+    title_paragraph.alignment = 1
+    _apply_paragraph_font(
+        title_paragraph,
+        config["heading_font"],
+        config["ascii_font"],
+        size=max(_as_float(config.get("heading1_size"), 16) + 2, 18),
+        bold=True,
+        line_spacing=_resolve_line_spacing(config),
+        space_before=Pt(0),
+        space_after=Pt(18),
+    )
 
 
 def _append_back_matter(document: Document, back_matter: dict[str, list[dict[str, Any]]], config: dict[str, Any]) -> None:
@@ -651,6 +678,7 @@ def _merge_format_config(config: dict[str, Any] | None) -> dict[str, Any]:
     merged["line_spacing_rule"] = _normalize_line_spacing_rule(merged.get("line_spacing_rule"), merged["line_spacing"])
     for key in ("body_font", "heading_font", "ascii_font", "table_style", "heading_numbering", "cover_style"):
         merged[key] = str(merged.get(key) or DEFAULT_FORMAT_CONFIG[key])
+    merged["show_title"] = bool(merged.get("show_title", DEFAULT_FORMAT_CONFIG["show_title"]))
     return merged
 
 
