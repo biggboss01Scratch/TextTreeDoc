@@ -6,6 +6,7 @@ uploaded/*
 generated/*
 templates/report_template.docx
 frontend/dist/
+docs/doxygen/
 node_modules/
 .env
 .env.*

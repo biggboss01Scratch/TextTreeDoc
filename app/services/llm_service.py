@@ -208,6 +208,13 @@ def _retry_count() -> int:
 
 
 def _read_positive_int_env(name: str, default: int) -> int:
+    """
+    @brief 读取非负整数环境变量。
+
+    @param name 环境变量名称。
+    @param default 默认值。
+    @return 解析后的非负整数；解析失败时返回默认值。
+    """
     value = os.getenv(name)
     if not value:
         return default

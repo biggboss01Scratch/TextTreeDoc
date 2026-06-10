@@ -28,6 +28,16 @@ def fill_document_locally(topic: str, tree: dict[str, Any], related_texts: list[
 
 
 def _fill_section(section: dict[str, Any], topic: str, material_text: str, level: int, order: str) -> None:
+    """
+    @brief 递归填充单个章节及其子章节。
+
+    @param section 当前章节节点。
+    @param topic 文档主题。
+    @param material_text 文本库资料摘要。
+    @param level 当前章节层级。
+    @param order 当前章节序号。
+    @return None。
+    """
     heading = section.get("heading") or f"{order} 未命名章节"
     summary = section.get("content") or section.get("summary") or ""
     if not section.get("paragraphs"):
@@ -44,6 +54,17 @@ def _build_paragraphs(
     level: int,
     blocks: list[dict[str, Any]],
 ) -> list[str]:
+    """
+    @brief 为章节生成本地兜底正文段落。
+
+    @param topic 文档主题。
+    @param heading 当前章节标题。
+    @param summary 结构树中的章节摘要。
+    @param material_text 文本库资料摘要。
+    @param level 当前章节层级。
+    @param blocks 章节中的表格、图片等块。
+    @return 正文段落列表。
+    """
     base = summary or f"本节围绕“{heading}”展开，服务于“{topic}”这一主题。"
     image_note = ""
     if any(block.get("type") == "image" for block in blocks or []):
@@ -59,6 +80,12 @@ def _build_paragraphs(
 
 
 def _material_summary(related_texts: list[dict]) -> str:
+    """
+    @brief 将相关文本压缩为正文填充可使用的资料摘要。
+
+    @param related_texts 文本库检索结果。
+    @return 拼接后的资料摘要。
+    """
     if not related_texts:
         return "当前可参考信息较少，正文以课程报告常规逻辑进行补充"
     snippets = []

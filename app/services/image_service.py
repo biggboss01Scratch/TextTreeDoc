@@ -153,6 +153,12 @@ def get_image_path(image_id: int) -> Path:
 
 
 def _row_to_image(row) -> dict:
+    """
+    @brief 将数据库行转换为图片素材字典。
+
+    @param row SQLite 查询结果行。
+    @return 图片素材字典，包含可预览 URL。
+    """
     data = dict(row)
     data["preview_url"] = f"/images/{data['id']}/file"
     return data

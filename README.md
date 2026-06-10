@@ -50,6 +50,25 @@ TextTreeDoc/
 └── templates/              # Word 基础模板，运行时生成
 ```
 
+## 项目文档
+
+- [接口说明](docs/api.md)
+- [开发说明](docs/development.md)
+- [贡献指南](CONTRIBUTING.md)
+- [最近更改记录](docs/recent_changes.md)
+
+如果本机安装了 Doxygen，可以生成代码级 API 文档：
+
+```bash
+doxygen Doxyfile
+```
+
+生成结果位于：
+
+```text
+docs/doxygen/html/
+```
+
 ## 安装依赖
 
 建议在 WSL/Linux 环境运行。
@@ -218,6 +237,21 @@ frontend/dist/
 ```
 
 当 `frontend/dist/` 存在时，FastAPI 会自动托管前端静态页面。
+
+## 开发检查
+
+提交前建议运行：
+
+```bash
+python3 -m compileall main.py app
+npm run build
+```
+
+如果修改了接口、数据模型或核心服务，建议同步更新：
+
+- `docs/api.md`
+- `docs/development.md`
+- 对应 Python 模块中的 Doxygen 注释
 
 ## 常见问题
 

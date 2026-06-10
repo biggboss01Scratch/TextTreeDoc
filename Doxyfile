@@ -1,0 +1,46 @@
+# Doxygen configuration for TextTreeDoc.
+#
+# Generate documentation with:
+#   doxygen Doxyfile
+
+PROJECT_NAME           = "TextTreeDoc"
+PROJECT_BRIEF          = "基于文本库的文档结构树与 Word 自动生成系统"
+PROJECT_NUMBER         = "0.1.0"
+OUTPUT_DIRECTORY       = docs/doxygen
+CREATE_SUBDIRS         = NO
+
+INPUT                  = README.md \
+                         main.py \
+                         app \
+                         docs/api.md \
+                         docs/development.md
+RECURSIVE              = YES
+FILE_PATTERNS          = *.py *.md
+EXCLUDE                = .venv \
+                         node_modules \
+                         frontend/dist \
+                         data \
+                         uploaded \
+                         generated \
+                         templates
+
+MARKDOWN_SUPPORT       = YES
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = NO
+HIDE_UNDOC_MEMBERS     = NO
+HIDE_UNDOC_CLASSES     = NO
+JAVADOC_AUTOBRIEF      = YES
+QT_AUTOBRIEF           = YES
+OPTIMIZE_OUTPUT_JAVA   = YES
+
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+GENERATE_LATEX         = NO
+GENERATE_TREEVIEW      = YES
+FULL_PATH_NAMES        = NO
+
+QUIET                  = NO
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = NO
+WARN_IF_DOC_ERROR      = YES
