@@ -410,18 +410,26 @@ def _build_fallback_document_format(
     if base_config:
         config.update(base_config)
     text = requirement or ""
+    fixed_line_spacing = _extract_fixed_line_spacing(text)
+    if fixed_line_spacing is not None:
+        config["line_spacing_rule"] = {"type": "exact", "value": fixed_line_spacing, "unit": "pt"}
+        config["line_spacing"] = 1.5
     if "不空" in text or "不要空" in text or "首行不缩进" in text:
         config["first_line_indent_chars"] = 0
     elif "空两" in text or "缩进两" in text or "空2" in text:
         config["first_line_indent_chars"] = 2
-    if "单倍" in text:
+    if fixed_line_spacing is None and "单倍" in text:
         config["line_spacing"] = 1.0
-    elif "1.25" in text:
+        config["line_spacing_rule"] = {"type": "multiple", "value": 1.0, "unit": "line"}
+    elif fixed_line_spacing is None and "1.25" in text:
         config["line_spacing"] = 1.25
-    elif "1.5" in text or "一点五" in text:
+        config["line_spacing_rule"] = {"type": "multiple", "value": 1.25, "unit": "line"}
+    elif fixed_line_spacing is None and ("1.5" in text or "一点五" in text):
         config["line_spacing"] = 1.5
-    elif "2倍" in text or "两倍" in text:
+        config["line_spacing_rule"] = {"type": "multiple", "value": 1.5, "unit": "line"}
+    elif fixed_line_spacing is None and ("2倍" in text or "两倍" in text):
         config["line_spacing"] = 2.0
+        config["line_spacing_rule"] = {"type": "multiple", "value": 2.0, "unit": "line"}
     if "宋体" in text:
         config["body_font"] = "宋体"
     if "仿宋" in text:
@@ -618,6 +626,23 @@ def _apply_spacing_requirement(config: dict[str, Any], text: str) -> None:
                         }
 
 
+def _extract_fixed_line_spacing(text: str) -> float | None:
+    """
+    @brief 从自然语言中提取固定磅值行距。
+
+    @param text 用户格式要求。
+    @return 固定行距磅值；未识别时返回 None。
+    """
+    match = re.search(
+        r"(?:正文[^。；;\n]*)?(?:固定)?(?:行距|行间距)"
+        r"(?:固定为|固定|改为|调整为|设为|设置为|为|是|:|：)?\s*"
+        r"(\d+(?:\.\d+)?)\s*(?:磅|pt)",
+        text,
+        flags=re.I,
+    )
+    return float(match.group(1)) if match else None
+
+
 def _apply_font_size_requirement(config: dict[str, Any], text: str) -> None:
     """
     @brief 从自然语言中解析中文字号。
@@ -656,10 +681,11 @@ def _apply_format_document_rules(config: dict[str, Any], text: str, extracted_ru
         config["line_spacing_rule"] = {"type": "exact", "value": 23, "unit": "pt"}
         config["line_spacing"] = 1.5
         extracted_rules.append("正文行间距：固定 23 磅")
-    line_match = re.search(r"行间距固定为\s*(\d+(?:\.\d+)?)\s*磅", text)
-    if line_match and not any(rule.startswith("正文行间距") for rule in extracted_rules):
-        config["line_spacing_rule"] = {"type": "exact", "value": float(line_match.group(1)), "unit": "pt"}
-        extracted_rules.append(f"固定行距：{line_match.group(1)} 磅")
+    fixed_line_spacing = _extract_fixed_line_spacing(text)
+    if fixed_line_spacing is not None and not any(rule.startswith("正文行间距") for rule in extracted_rules):
+        config["line_spacing_rule"] = {"type": "exact", "value": fixed_line_spacing, "unit": "pt"}
+        config["line_spacing"] = 1.5
+        extracted_rules.append(f"固定行距：{fixed_line_spacing:g} 磅")
     if "正文" in text and "宋体" in text and ("小4" in text or "小四" in text):
         config["body_font"] = "宋体"
         config["body_size"] = 12

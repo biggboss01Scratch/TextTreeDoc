@@ -315,7 +315,7 @@ function generationNotice(meta, successText, localText) {
   if (!meta) return { message: successText, type: 'success' }
   if (meta.fallback) {
     const reason = meta.fallback_reason ? `：${meta.fallback_reason}` : ''
-    return { message: `DeepSeek 调用失败，已使用本地规则${reason}`, type: 'warning' }
+    return { message: `智慧模式调用失败，已使用本地规则${reason}`, type: 'warning' }
   }
   if (meta.used_llm) {
     return { message: successText, type: 'success' }
@@ -636,6 +636,7 @@ function applyDocumentTemplatePreset(template) {
       abstract: false,
       references: false,
       line_spacing: 1.5,
+      line_spacing_rule: { type: 'multiple', value: 1.5, unit: 'line' },
       first_line_indent_chars: 2,
       table_style: 'Table Grid',
       body_space_before: { value: 0, unit: 'pt' },
@@ -658,6 +659,7 @@ function applyDocumentTemplatePreset(template) {
       abstract: true,
       references: true,
       line_spacing: 1.5,
+      line_spacing_rule: { type: 'multiple', value: 1.5, unit: 'line' },
       first_line_indent_chars: 2,
       table_style: 'Table Grid',
       body_space_before: { value: 0, unit: 'pt' },
@@ -680,6 +682,7 @@ function applyDocumentTemplatePreset(template) {
       abstract: false,
       references: true,
       line_spacing: 1.35,
+      line_spacing_rule: { type: 'multiple', value: 1.35, unit: 'line' },
       first_line_indent_chars: 2,
       table_style: 'Light Shading Accent 1',
       body_space_before: { value: 0, unit: 'pt' },
@@ -702,6 +705,7 @@ function applyDocumentTemplatePreset(template) {
       abstract: false,
       references: false,
       line_spacing: 1.35,
+      line_spacing_rule: { type: 'multiple', value: 1.35, unit: 'line' },
       first_line_indent_chars: 0,
       table_style: 'Table Grid',
       body_space_before: { value: 0, unit: 'pt' },
@@ -1097,7 +1101,7 @@ async function generateTree() {
     })
     selectedSectionPath.value = sectionOptions.value[0]?.path || ''
     downloadUrl.value = ''
-    const notice = generationNotice(currentTree.value?.generation_meta, 'DeepSeek 已成功生成结构树', '结构树已由本地规则生成')
+    const notice = generationNotice(currentTree.value?.generation_meta, '智慧模式已成功生成结构树', '结构树已由本地规则生成')
     setNotice(notice.message, notice.type)
   } catch (error) {
     setNotice(error.message, 'error')
@@ -1135,7 +1139,7 @@ async function fillDocumentContent() {
         },
       }),
     })
-    const notice = generationNotice(currentTree.value?.generation_meta, 'DeepSeek 已成功填充正文', '正文已由本地规则填充')
+    const notice = generationNotice(currentTree.value?.generation_meta, '智慧模式已成功填充正文', '正文已由本地规则填充')
     setNotice(notice.message, notice.type)
   } catch (error) {
     setNotice(error.message, 'error')
@@ -1169,7 +1173,7 @@ async function generateImprovementOptions() {
     improvementOptions.value = result.options || []
     selectedImprovement.value = null
     showImprovementOptions.value = true
-    const notice = generationNotice(result.generation_meta, 'DeepSeek 已生成反馈改进选项', '反馈改进选项已由本地规则生成')
+    const notice = generationNotice(result.generation_meta, '智慧模式已生成反馈改进选项', '反馈改进选项已由本地规则生成')
     setNotice(notice.message, notice.type)
   } catch (error) {
     setNotice(error.message, 'error')
@@ -1413,7 +1417,7 @@ onMounted(async () => {
       <section class="panel format-builder-panel">
         <div v-if="buildingDocumentTemplate" class="loading-overlay light-loading-overlay">
           <span class="spinner"></span>
-          <strong>DeepSeek 正在生成文档格式模板</strong>
+          <strong>智慧模式正在生成文档格式模板</strong>
           <small>正在分析标题编号、字体、行距和段落格式</small>
         </div>
         <div class="panel-head">
@@ -1475,7 +1479,7 @@ onMounted(async () => {
           <label class="switch compact-switch">
             <input v-model="useLLM" type="checkbox" class="switch-native" />
             <span class="switch-box"></span>
-            <span class="switch-text">使用 DeepSeek 生成格式</span>
+            <span class="switch-text">使用智慧模式生成格式</span>
           </label>
           <button type="button" class="primary" :disabled="loading" @click="buildDocumentTemplate">
             生成模板配置
@@ -1521,7 +1525,7 @@ onMounted(async () => {
             <h2>生成结构树</h2>
           </div>
           <span class="soft-badge">
-            {{ generationMeta?.stage === 'tree' ? (generationMeta.fallback ? '本地回退' : 'DeepSeek 成功') : `${selectedLibraries.length} 个文本库已选` }}
+            {{ generationMeta?.stage === 'tree' ? (generationMeta.fallback ? '本地回退' : '智慧模式成功') : `${selectedLibraries.length} 个文本库已选` }}
           </span>
         </div>
 
@@ -1530,7 +1534,7 @@ onMounted(async () => {
           <label class="switch">
             <input v-model="useLLM" type="checkbox" class="switch-native" />
             <span class="switch-box"></span>
-            <span class="switch-text">使用 DeepSeek</span>
+            <span class="switch-text">使用智慧模式</span>
           </label>
           <button type="button" class="primary" :disabled="loading" @click="generateTree">生成结构树</button>
         </div>
@@ -1582,7 +1586,7 @@ onMounted(async () => {
         <div class="tree-frame">
           <div v-if="generatingWithLLM || fillingDocument" class="loading-overlay">
             <span class="spinner"></span>
-            <strong>{{ fillingDocument ? 'DeepSeek 正在填充正文' : 'DeepSeek 正在生成结构树' }}</strong>
+            <strong>{{ fillingDocument ? '智慧模式正在填充正文' : '智慧模式正在生成结构树' }}</strong>
             <small>{{ fillingDocument ? '正在根据结构树、图片和文本库生成正文段落' : '模型调用可能需要几秒，请稍候' }}</small>
           </div>
           <div v-if="visualOutlineItems.length" class="visual-tree">
@@ -1745,7 +1749,7 @@ onMounted(async () => {
             <h2>填充内容并导出</h2>
           </div>
           <span class="soft-badge">
-            {{ generationMeta?.stage === 'fill' ? (generationMeta.fallback ? '本地回退' : 'DeepSeek 成功') : filledParagraphCount ? `已填充 ${filledParagraphCount} 段` : '等待填充' }}
+            {{ generationMeta?.stage === 'fill' ? (generationMeta.fallback ? '本地回退' : '智慧模式成功') : filledParagraphCount ? `已填充 ${filledParagraphCount} 段` : '等待填充' }}
           </span>
         </div>
 
@@ -1760,7 +1764,7 @@ onMounted(async () => {
           <label class="switch">
             <input v-model="useLLM" type="checkbox" class="switch-native" />
             <span class="switch-box"></span>
-            <span class="switch-text">使用 DeepSeek</span>
+            <span class="switch-text">使用智慧模式</span>
           </label>
           <a v-if="downloadUrl" class="download" :href="downloadUrl">下载 Word</a>
           <span v-else class="result-hint">底部按钮会按顺序完成正文填充和 Word 生成。</span>
@@ -1782,7 +1786,7 @@ onMounted(async () => {
         <div class="tree-frame">
           <div v-if="fillingDocument" class="loading-overlay">
             <span class="spinner"></span>
-            <strong>DeepSeek 正在填充正文</strong>
+            <strong>智慧模式正在填充正文</strong>
             <small>正在根据结构树、图片和文本库生成正文段落</small>
           </div>
           <div v-if="visualOutlineItems.length" class="visual-tree">
